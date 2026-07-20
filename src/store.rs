@@ -110,13 +110,22 @@ impl Store {
         }
     }
 
+    /// Etiqueta de una lane. El numero es su POSICION, no su indice interno:
+    /// las teclas 1-6 seleccionan por posicion, asi que lo que se ve tiene que
+    /// coincidir con la tecla que lleva ahi.
     pub fn lane_label(&self, i: usize) -> String {
         let n = self.lane_names.get(i).map(|s| s.as_str()).unwrap_or("");
+        let num = self.position_of(i) + 1;
         if n.trim().is_empty() {
-            format!("{} · (sin nombre)", i + 1)
+            format!("{} · (sin nombre)", num)
         } else {
-            format!("{} · {}", i + 1, n.to_uppercase())
+            format!("{} · {}", num, n.to_uppercase())
         }
+    }
+
+    /// Lane que ocupa una posicion de pintado (lo que pulsa la tecla 1-6).
+    pub fn lane_at_position(&self, pos: usize) -> usize {
+        self.lane_order.get(pos).copied().unwrap_or(pos)
     }
 
     pub fn lane_of(&self, pane_id: &str) -> usize {

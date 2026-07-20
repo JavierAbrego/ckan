@@ -495,7 +495,7 @@ fn draw_rename(f: &mut Frame, area: Rect, lane: usize, buf: &str, app: &App) {
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(color))
         .title(Span::styled(
-            format!(" renombrar lane {} ", lane + 1),
+            format!(" renombrar lane {} ", app.store.position_of(lane) + 1),
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
@@ -504,7 +504,6 @@ fn draw_rename(f: &mut Frame, area: Rect, lane: usize, buf: &str, app: &App) {
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
-    let _ = app;
     f.render_widget(Paragraph::new(format!("{}█", buf)), inner);
 }
 
@@ -590,14 +589,15 @@ fn draw_help(f: &mut Frame, area: Rect) {
    enter       saltar al pane (IN PROGRESS / WAITING)
 
  ORGANIZAR
-   1 … 6       mover la tarjeta a esa swimlane
+   1 … 6       mover la tarjeta a la swimlane en esa posicion
    R           renombrar la swimlane de la seleccion
    shift+J     bajar la swimlane entera una posicion
    shift+K     subirla (tambien shift+↓ / shift+↑)
 
-   Reordenar cambia solo donde se pinta la lane: su numero
-   no cambia, asi que la tecla que la selecciona sigue
-   siendo la misma.
+   Las teclas 1-6 van por POSICION: la 1 es siempre la
+   swimlane de arriba. Al reordenar, los numeros se
+   reasignan solos para que sigan coincidiendo con lo
+   que ves.
 
  PROMPTS (columna TODO)
    n           prompt nuevo (editor a pantalla completa)

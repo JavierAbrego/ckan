@@ -191,8 +191,11 @@ impl App {
         self.row = ((self.row as i32 + d).rem_euclid(n)) as usize;
     }
 
-    /// Manda la tarjeta seleccionada a otra lane.
-    pub fn assign_lane(&mut self, lane: usize) {
+    /// Manda la tarjeta seleccionada a la lane que ocupa esa POSICION.
+    /// La tecla 1 siempre lleva a la lane de arriba, la 2 a la siguiente, etc.,
+    /// independientemente de como se hayan reordenado.
+    pub fn assign_lane(&mut self, pos: usize) {
+        let lane = self.store.lane_at_position(pos);
         let Some((_, i)) = self.selected() else { return };
         match self.col {
             Col::Todo => {
