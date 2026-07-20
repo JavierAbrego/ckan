@@ -25,6 +25,14 @@ fn main() -> io::Result<()> {
         std::process::exit(1);
     }
 
+    // $TMUX puede venir heredada en un shell sin terminal real (scripts, CI).
+    // Sin esta comprobacion, enable_raw_mode falla con un error de sistema
+    // criptico en vez de decir lo que pasa.
+    if !std::io::IsTerminal::is_terminal(&io::stdout()) {
+        eprintln!("ckan necesita un terminal interactivo (stdout no lo es).");
+        std::process::exit(1);
+    }
+
     enable_raw_mode()?;
     let mut out = io::stdout();
     execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
