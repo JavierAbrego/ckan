@@ -11,7 +11,7 @@ and which are waiting on you.
 
 ![The board](docs/img/board.png)
 
-Three columns, six swimlanes. The **columns** are automatic: `ckan` reads each
+Three columns, nine swimlanes. The **columns** are automatic: `ckan` reads each
 pane's state from tmux and moves cards between *in progress* and *waiting* on
 its own. The **swimlanes** are yours — group panes by project, by priority, by
 whatever you like.
@@ -101,7 +101,7 @@ you can tell at a glance which notes still reflect reality.
 |---|---|
 | `←` `→` `↑` `↓` | Move between columns and cards (`h` `j` `k` `l` also work) |
 | `J` / `K` | Move the whole swimlane down / up (also `Shift`+`↓`/`↑`) |
-| `1`–`6` | Send the selected card to that swimlane |
+| `1`–`9` | Send the selected card to that swimlane |
 | `R` | Rename the swimlane |
 | `n` | New prompt |
 | `e` | Edit — the prompt in TODO, or the note on a pane |

@@ -246,7 +246,7 @@ fn on_board_key(app: &mut App, k: KeyEvent, _ctrl: bool) {
         KeyCode::Right | KeyCode::Char('l') => app.move_col(1),
         KeyCode::Up | KeyCode::Char('k') => app.move_row(-1),
         KeyCode::Down | KeyCode::Char('j') => app.move_row(1),
-        KeyCode::Char(c @ '1'..='6') => {
+        KeyCode::Char(c @ '1'..='9') => {
             let lane = c.to_digit(10).unwrap() as usize - 1;
             app.assign_lane(lane);
         }

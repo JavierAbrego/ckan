@@ -28,6 +28,13 @@ const LANE_COLORS: [Color; N_LANES] = [
     Color::Yellow,
     Color::Blue,
     Color::LightRed,
+    // Los seis de arriba son la paleta original y no se mueven de posicion:
+    // quien ya tenga swimlanes asignadas las sigue viendo del mismo color.
+    // Los tres nuevos van en RGB porque la paleta nombrada ya no da tonos que
+    // se separen de los anteriores manteniendo contraste sobre fondo oscuro.
+    Color::Rgb(255, 140, 40),  // naranja
+    Color::Rgb(235, 140, 175), // rosa
+    Color::Rgb(190, 150, 255), // lila
 ];
 
 /// Una nota mas vieja que esto ya no es de fiar: la marcamos.
@@ -370,7 +377,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
-        Mode::Board => "[←→↑↓] nav  [J/K] move swimlane  [1-6] assign  [n]ew [e]dit [d]el  [y] copy  [s] send  [enter] jump  [R] rename  [?] help  [q] quit",
+        Mode::Board => "[←→↑↓] nav  [J/K] move swimlane  [1-9] assign  [n]ew [e]dit [d]el  [y] copy  [s] send  [enter] jump  [R] rename  [?] help  [q] quit",
         _ => "[esc] cancel",
     };
     let line = Line::from(vec![
@@ -589,12 +596,12 @@ fn draw_help(f: &mut Frame, area: Rect) {
    enter       jump to the pane (IN PROGRESS / WAITING)
 
  ORGANIZE
-   1 … 6       move the card to the swimlane in that position
+   1 … 9       move the card to the swimlane in that position
    R           rename the swimlane of the selection
    shift+J     move the whole swimlane down one position
    shift+K     move it up (also shift+↓ / shift+↑)
 
-   Keys 1-6 go by POSITION: 1 is always the top
+   Keys 1-9 go by POSITION: 1 is always the top
    swimlane. When you reorder, the numbers are
    reassigned on their own so they keep matching what
    you see.

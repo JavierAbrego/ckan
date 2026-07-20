@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-pub const N_LANES: usize = 6;
+pub const N_LANES: usize = 9;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Prompt {
@@ -28,12 +28,12 @@ pub struct Note {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Store {
-    /// Nombres de las 6 lanes. Vacio = sin bautizar.
+    /// Nombres de las 9 lanes. Vacio = sin bautizar.
     pub lane_names: Vec<String>,
     /// Orden de pintado: posicion -> indice de lane.
     ///
     /// Separamos identidad de posicion a proposito. El indice de lane es lo que
-    /// usan las teclas 1-6 y lo que guardamos en pane_lane; si al reordenar
+    /// usan las teclas 1-9 y lo que guardamos en pane_lane; si al reordenar
     /// permutasemos los indices, la tecla 2 dejaria de llevar a la lane que el
     /// usuario tiene asociada al 2. Aqui solo cambia donde se dibuja.
     #[serde(default = "default_order")]
@@ -111,7 +111,7 @@ impl Store {
     }
 
     /// Etiqueta de una lane. El numero es su POSICION, no su indice interno:
-    /// las teclas 1-6 seleccionan por posicion, asi que lo que se ve tiene que
+    /// las teclas 1-9 seleccionan por posicion, asi que lo que se ve tiene que
     /// coincidir con la tecla que lleva ahi.
     pub fn lane_label(&self, i: usize) -> String {
         let n = self.lane_names.get(i).map(|s| s.as_str()).unwrap_or("");
@@ -123,7 +123,7 @@ impl Store {
         }
     }
 
-    /// Lane que ocupa una posicion de pintado (lo que pulsa la tecla 1-6).
+    /// Lane que ocupa una posicion de pintado (lo que pulsa la tecla 1-9).
     pub fn lane_at_position(&self, pos: usize) -> usize {
         self.lane_order.get(pos).copied().unwrap_or(pos)
     }

@@ -83,6 +83,7 @@ P3=$(demo_pane db       "$WORKING" "migrate-schema-v3")
 P4=$(demo_pane ui       "$IDLE"    "fix-flaky-upload-test")
 P5=$(demo_pane deploy   "$WORKING" "write-deploy-runbook")
 P6=$(demo_pane docs     "$IDLE"    "document-webhook-retries")
+P7=$(demo_pane bench    "$WORKING" "profile-cold-start")
 
 # --- Estado de demostracion ------------------------------------------------
 # Nombres genericos a proposito: el repo es publico y no debe filtrar los
@@ -94,15 +95,15 @@ NOW=$(date +%s)
 mkdir -p "$STATE/ckan"
 cat > "$STATE/ckan/board.json" <<EOF
 {
-  "lane_names": ["api", "web", "infra", "", "", ""],
-  "lane_order": [0, 1, 2, 3, 4, 5],
+  "lane_names": ["api", "web", "infra", "perf", "docs", "", "", "", ""],
+  "lane_order": [0, 1, 2, 3, 4, 5, 6, 7, 8],
   "prompts": [
     { "text": "Add rate limiting to the public endpoints, 100 req/min per API key.", "lane": 0 },
     { "text": "Audit the Dockerfile for unpinned base images.", "lane": 2 }
   ],
   "pane_lane": {
     "$P1": 0, "$P2": 1, "$P3": 0,
-    "$P4": 1, "$P5": 2, "$P6": 2
+    "$P4": 1, "$P5": 2, "$P6": 4, "$P7": 3
   },
   "notes": {
     "$P1": {

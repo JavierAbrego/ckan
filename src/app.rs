@@ -216,7 +216,7 @@ impl App {
 
     /// Mueve la lane de la seleccion una posicion arriba/abajo, con todo su
     /// contenido (nombre, prompts, panes). No cambia el indice de la lane, asi
-    /// que las teclas 1-6 siguen llevando a la misma lane de siempre.
+    /// que las teclas 1-9 siguen llevando a la misma lane de siempre.
     pub fn move_lane(&mut self, down: bool) {
         let Some((lane, item)) = self.selected() else {
             self.status = "nothing selected".into();
