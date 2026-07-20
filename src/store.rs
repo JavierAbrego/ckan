@@ -117,7 +117,7 @@ impl Store {
         let n = self.lane_names.get(i).map(|s| s.as_str()).unwrap_or("");
         let num = self.position_of(i) + 1;
         if n.trim().is_empty() {
-            format!("{} · (sin nombre)", num)
+            format!("{} · (unnamed)", num)
         } else {
             format!("{} · {}", num, n.to_uppercase())
         }

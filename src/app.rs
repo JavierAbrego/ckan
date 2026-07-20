@@ -81,7 +81,7 @@ impl App {
             col: Col::Todo,
             row: 0,
             mode: Mode::Board,
-            status: "listo".into(),
+            status: "ready".into(),
             should_quit: false,
         };
         a.refresh();
@@ -219,14 +219,14 @@ impl App {
     /// que las teclas 1-6 siguen llevando a la misma lane de siempre.
     pub fn move_lane(&mut self, down: bool) {
         let Some((lane, item)) = self.selected() else {
-            self.status = "nada seleccionado".into();
+            self.status = "nothing selected".into();
             return;
         };
         if !self.store.swap_lane(lane, down) {
             self.status = if down {
-                "ya es la ultima lane".into()
+                "already the last swimlane".into()
             } else {
-                "ya es la primera lane".into()
+                "already the first swimlane".into()
             };
             return;
         }
@@ -242,7 +242,7 @@ impl App {
         }
 
         let label = self.store.lane_label(lane);
-        self.status = format!("{} → posicion {}", label, self.store.position_of(lane) + 1);
+        self.status = format!("{} → position {}", label, self.store.position_of(lane) + 1);
         self.persist();
     }
 
@@ -292,7 +292,7 @@ impl App {
             // Un prompt vacio no aporta nada: si estabas editando, lo borramos.
             if let Some(i) = idx {
                 self.store.prompts.remove(i);
-                self.status = "prompt eliminado".into();
+                self.status = "prompt deleted".into();
             }
         } else {
             match idx {
@@ -300,7 +300,7 @@ impl App {
                 None => {
                     let lane = self.selected().map(|(l, _)| l).unwrap_or(0);
                     self.store.prompts.push(Prompt { text, lane });
-                    self.status = "prompt guardado".into();
+                    self.status = "prompt saved".into();
                 }
             }
         }
@@ -323,7 +323,7 @@ impl App {
             );
         }
         self.mode = Mode::Board;
-        self.status = "nota guardada".into();
+        self.status = "note saved".into();
         self.persist();
     }
 
@@ -331,11 +331,11 @@ impl App {
         let Some((_, i)) = self.selected() else { return };
         if self.col == Col::Todo {
             self.store.prompts.remove(i);
-            self.status = "prompt eliminado".into();
+            self.status = "prompt deleted".into();
             self.persist();
             self.clamp();
         } else {
-            self.status = "solo se borran prompts del TODO".into();
+            self.status = "only TODO prompts can be deleted".into();
         }
     }
 
@@ -343,9 +343,9 @@ impl App {
         let Some((_, i)) = self.selected() else { return };
         if self.col == Col::Todo {
             tmux::copy(&self.store.prompts[i].text);
-            self.status = "copiado (OSC52 + buffer tmux: prefix+])".into();
+            self.status = "copied (OSC52 + tmux buffer: prefix+])".into();
         } else {
-            self.status = "nada que copiar aqui".into();
+            self.status = "nothing to copy here".into();
         }
     }
 
@@ -353,11 +353,11 @@ impl App {
     pub fn start_send(&mut self) {
         let Some((_, i)) = self.selected() else { return };
         if self.col != Col::Todo {
-            self.status = "solo se envian prompts del TODO".into();
+            self.status = "only TODO prompts can be sent".into();
             return;
         }
         if self.panes.is_empty() {
-            self.status = "no hay panes de Claude a los que enviar".into();
+            self.status = "no Claude panes to send to".into();
             return;
         }
         // Primero los panes de la misma lane que el prompt: son los candidatos
@@ -375,9 +375,9 @@ impl App {
             .iter()
             .map(|p| {
                 let st = if p.state == State::Working {
-                    "trabajando"
+                    "working"
                 } else {
-                    "te espera"
+                    "waiting for you"
                 };
                 let mark = if self.store.lane_of(&p.id) == lane {
                     "▸ "
@@ -412,7 +412,7 @@ impl App {
         self.store.prompts.remove(prompt_idx);
 
         self.mode = Mode::Board;
-        self.status = "escrito en el pane — pulsa Enter alli para lanzarlo".into();
+        self.status = "typed into the pane — press Enter there to run it".into();
         // Persistimos ANTES de saltar: el foco se va a otro pane y no volvemos
         // a pasar por aqui.
         self.persist();
@@ -425,7 +425,7 @@ impl App {
     pub fn focus_selected(&mut self) {
         let Some((_, i)) = self.selected() else { return };
         if self.col == Col::Todo {
-            self.status = "[s] envia el prompt a un pane".into();
+            self.status = "[s] sends the prompt to a pane".into();
         } else {
             tmux::focus_pane(&self.panes[i].id);
             self.status = format!("→ {}", self.panes[i].loc);
@@ -441,7 +441,7 @@ impl App {
     pub fn commit_rename(&mut self, lane: usize, buf: String) {
         self.store.lane_names[lane] = buf.trim().to_string();
         self.mode = Mode::Board;
-        self.status = "lane renombrada".into();
+        self.status = "swimlane renamed".into();
         self.persist();
     }
 }

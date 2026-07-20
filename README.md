@@ -1,105 +1,181 @@
 # ckan
 
-Kanban en terminal para monitorizar varias sesiones de Claude Code repartidas en
-panes de tmux.
+A terminal kanban board for the Claude Code sessions you have running across
+tmux panes. The name is short for **C**laude **KAN**ban — it has nothing to do
+with [CKAN](https://ckan.org), the open data portal.
 
-Tres columnas — **TODO** (prompts que aún no has lanzado), **IN PROGRESS** y
-**WAITING** — cruzadas con seis *swimlanes* que asignas tú. Cada pane viaja de
-una columna a otra dentro de su lane según el estado real de la sesión.
+If you keep several Claude Code sessions open at once — one refactoring, one
+writing tests, one you started an hour ago and forgot about — `ckan` gives you
+the one thing tmux does not: a single screen showing which of them are working
+and which are waiting on you.
 
-```
-┌─ CLAUDE KANBAN · 6 sesiones ──────────────────────────────────────┐
-│  📝 TODO           ⏳ IN PROGRESS        ✅ WAITING                │
-│┌ 2 · INFERENCEKEY ───────────────────────────────────────────────┐│
-││▏revisar los       ▏ik          0:2.3    ▏ik            0:2.1    ││
-││▏constructores…    ▏custom-backends-…    ▏fix-inference-result…  ││
-││                   ▏▸ sección custom     ▏· sin nota             ││
-││                   ▏↳ pedir review       ▏               31m     ││
-│└─────────────────────────────────────────────────────────────────┘│
-└───────────────────────────────────────────────────────────────────┘
-```
+![The board](docs/img/board.png)
 
-## Requisitos
+Three columns, six swimlanes. The **columns** are automatic: `ckan` reads each
+pane's state from tmux and moves cards between *in progress* and *waiting* on
+its own. The **swimlanes** are yours — group panes by project, by priority, by
+whatever you like.
 
-- tmux (probado en 3.5a)
-- Rust ≥ 1.75 para compilar
+## Why
 
-## Instalación
+tmux tells you a pane exists. It does not tell you that the session in window 5
+finished twenty minutes ago and has been idle ever since, or that the prompt you
+meant to send to the API session went to the frontend one.
+
+`ckan` answers three questions at a glance:
+
+- **What is running right now?**
+- **What is waiting for me, and for how long?** — the longest-waiting card sorts
+  to the top, and anything idle for over an hour is flagged.
+- **What did I mean to do next?** — each pane carries two notes, *what I'm
+  doing* and *what I expect next*, so returning to a session after an hour does
+  not start with "…where was I?"
+
+## Requirements
+
+- tmux (developed against 3.5a)
+- Rust 1.75 or newer, to build
+
+## Install
 
 ```bash
+git clone https://github.com/JavierAbrego/ckan.git
+cd ckan
 cargo build --release
 install -m755 target/release/ckan ~/.local/bin/ckan
 ```
 
-Ejecutar **dentro de tmux**:
+Run it **inside tmux**:
 
 ```bash
 ckan
-# o en su propia ventana:
-tmux new-window -n kanban 'ckan'
 ```
 
-## Teclas
+It works best in a window of its own:
 
-| Tecla | Acción |
+```bash
+tmux new-window -n kanban ckan
+```
+
+## The workflow
+
+The board is built around one loop: **write a prompt → send it to a session →
+watch it move across the board.**
+
+### 1. Write prompts before you need them
+
+Press `n` to open a full-screen editor and write a prompt. It stays in the
+**TODO** column until you use it, so you can draft work in advance instead of
+composing it under pressure in a live session.
+
+![Editing a prompt](docs/img/prompt-edit.png)
+
+### 2. Send it to a session
+
+Press `s` on a prompt and pick a destination. Panes in the prompt's own
+swimlane are listed first and marked `▸`; within each group, sessions that are
+waiting for you come before ones that are busy.
+
+![Choosing a destination](docs/img/send.png)
+
+The prompt is typed into the target pane and `ckan` jumps you there — **without
+pressing Enter**. You read it in place and send it yourself. That is deliberate:
+typing into the wrong live session is the one mistake this tool should never
+make on your behalf.
+
+### 3. Follow it across the board
+
+Once Claude starts working, the card moves to **IN PROGRESS**. When it finishes
+and needs you, it moves to **WAITING** with a timer. Press `enter` on any card to
+jump straight to that pane.
+
+### Notes: what you're doing, what comes next
+
+Press `e` on a pane to record two lines — `▸` what you are doing, `↳` what you
+expect next. A note untouched for more than an hour is labelled with its age, so
+you can tell at a glance which notes still reflect reality.
+
+## Keys
+
+| Key | Action |
 |---|---|
-| `←→↑↓` / `hjkl` | Navegar entre columnas y tarjetas |
-| `1`–`6` | Mover la tarjeta seleccionada a esa swimlane |
-| `R` | Renombrar la swimlane |
-| `n` | Prompt nuevo (editor a pantalla completa) |
-| `e` | Editar: prompt en TODO, nota en un pane |
-| `d` | Borrar el prompt seleccionado |
-| `y` | Copiar el prompt al portapapeles |
-| `s` | Escribir el prompt en un pane (pide confirmación) |
-| `enter` | Saltar al pane |
-| `r` | Refrescar ya |
-| `?` | Ayuda |
-| `q` | Salir |
+| `←` `→` `↑` `↓` | Move between columns and cards (`h` `j` `k` `l` also work) |
+| `J` / `K` | Move the whole swimlane down / up (also `Shift`+`↓`/`↑`) |
+| `1`–`6` | Send the selected card to that swimlane |
+| `R` | Rename the swimlane |
+| `n` | New prompt |
+| `e` | Edit — the prompt in TODO, or the note on a pane |
+| `d` | Delete the selected prompt |
+| `y` | Copy the prompt to the clipboard |
+| `s` | Send the prompt to a pane |
+| `enter` | Jump to the pane |
+| `r` | Refresh now |
+| `?` | Help |
+| `q` | Quit |
 
-### Notas por pane
+![The help screen](docs/img/help.png)
 
-Cada pane admite dos campos: **▸ qué estoy haciendo** y **↳ qué espero después**.
-Si una nota lleva más de una hora sin tocarse, la tarjeta lo indica (`nota 2h`)
-— señal de que probablemente ya no refleja la realidad.
+## Where state lives
 
-### Enviar un prompt
+Swimlanes, prompts, and notes are stored in `~/.local/state/ckan/board.json`
+(or `$XDG_STATE_HOME/ckan/` if you set it).
 
-`s` sobre un prompt lista los panes de Claude como destino, poniendo primero los
-de la misma swimlane (marcados `▸`) y, dentro de cada grupo, los que están
-esperando antes que los ocupados.
+State is keyed by tmux's **pane id** (`%17`), not by position (`0:2.1`), so
+your notes and swimlane assignments survive reordering windows. When a pane
+closes, its entry is dropped.
 
-El texto se escribe en el pane **sin pulsar Enter**: lo revisas allí y lo lanzas
-tú. Es deliberado — `send-keys` sobre la sesión equivocada mete texto donde no
-toca.
+## Known limitations
 
-## Estado en disco
+Worth knowing before you rely on it.
 
-Lanes, prompts y notas se guardan en `~/.local/state/ckan/board.json`
-(o `$XDG_STATE_HOME/ckan/`). Se anclan al `pane_id` de tmux (`%17`), no a la
-posición (`0:2.1`), para que sobrevivan a reordenar ventanas. Al cerrarse un
-pane, su entrada se descarta.
+**Session state is read from the pane title.** Claude Code writes `✳` when idle
+and a braille spinner while working, and `ckan` classifies on that. It is
+presentation, not a stable API: if a future version changes the format, every
+card lands in the wrong column. The patterns are isolated at the top of
+`src/tmux.rs` so fixing it is a one-line change.
 
-## Limitaciones conocidas
+**Timers start at zero when you launch the board.** tmux does not record when a
+pane last changed title, so transitions have to be observed live. Close and
+reopen `ckan` and the counters restart — swimlanes and notes persist, timers
+do not.
 
-**La detección de estado depende del título del pane.** Claude Code escribe `✳`
-cuando está idle y un spinner braille mientras trabaja. Es formato de
-presentación, no una API estable: si cambia en una versión futura, la
-clasificación se rompe. El patrón está aislado al principio de `src/tmux.rs`
-para que corregirlo sea una línea.
+**Clipboard goes through OSC52.** `y` works over SSH if your terminal supports
+it, with `set-clipboard on` or `external` in tmux. The tmux buffer is always
+written as a fallback, so `prefix + ]` pastes even when OSC52 does not get
+through.
 
-**Los contadores de tiempo empiezan en cero al arrancar.** tmux no guarda desde
-cuándo un pane tiene su título actual, así que las transiciones hay que
-observarlas en vivo. Las notas y las lanes sí persisten.
+**It wants a wide terminal.** The key bar is a single line of about 130
+characters, so below roughly 100 columns it gets cut off on the right, and the
+help overlay needs about 46 rows to show its last section. Everything still
+works — you just stop being able to read the reminders. Give it a full-width
+window.
 
-**El portapapeles va por OSC52.** Funciona a través de SSH si tu terminal lo
-soporta, con `set-clipboard on|external` en tmux. El buffer de tmux queda
-siempre como respaldo (`prefix + ]`).
+## Project layout
 
-## Estructura
-
-| Fichero | Contenido |
+| File | Contents |
 |---|---|
-| `src/tmux.rs` | Diálogo con tmux; patrones de detección de estado |
-| `src/store.rs` | Persistencia de lanes, prompts y notas |
-| `src/app.rs` | Estado en memoria, navegación y acciones |
-| `src/ui.rs` | Dibujado del tablero y overlays |
+| `src/tmux.rs` | Everything that talks to tmux, including the state-detection patterns |
+| `src/store.rs` | Persistence of swimlanes, prompts, and notes |
+| `src/app.rs` | In-memory state, navigation, actions |
+| `src/ui.rs` | Rendering and overlays |
+| `tools/` | Development tooling — screenshot generation, not part of the binary |
+
+Source comments are in Spanish; they are the author's working notes. Everything
+the user sees is in English.
+
+## Regenerating the screenshots
+
+The images above are captured from the real interface, not mocked up. To rebuild
+them after a UI change, from inside tmux:
+
+```bash
+./tools/screenshots.sh
+```
+
+It builds a throwaway demo scenario in its own tmux window and writes to
+`docs/img/`. It never reads your real sessions and never touches your real
+`board.json`.
+
+## License
+
+MIT

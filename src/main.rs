@@ -21,7 +21,7 @@ const REFRESH: Duration = Duration::from_secs(2);
 
 fn main() -> io::Result<()> {
     if std::env::var("TMUX").is_err() {
-        eprintln!("ckan hay que ejecutarlo dentro de tmux.");
+        eprintln!("ckan must run inside tmux. Start a tmux session and run it there.");
         std::process::exit(1);
     }
 
@@ -29,7 +29,7 @@ fn main() -> io::Result<()> {
     // Sin esta comprobacion, enable_raw_mode falla con un error de sistema
     // criptico en vez de decir lo que pasa.
     if !std::io::IsTerminal::is_terminal(&io::stdout()) {
-        eprintln!("ckan necesita un terminal interactivo (stdout no lo es).");
+        eprintln!("ckan needs an interactive terminal: stdout is not one. Run it directly in a tmux pane, without redirecting output.");
         std::process::exit(1);
     }
 
@@ -188,7 +188,7 @@ fn on_key(app: &mut App, k: KeyEvent) {
         } => match k.code {
             KeyCode::Esc => {
                 app.mode = Mode::Board;
-                app.status = "envio cancelado".into();
+                app.status = "send cancelled".into();
             }
             KeyCode::Up => {
                 sel = sel.saturating_sub(1);
@@ -258,7 +258,7 @@ fn on_board_key(app: &mut App, k: KeyEvent, _ctrl: bool) {
         KeyCode::Char('R') => app.start_rename(),
         KeyCode::Char('r') => {
             app.refresh();
-            app.status = "refrescado".into();
+            app.status = "refreshed".into();
         }
         KeyCode::Enter => app.focus_selected(),
         _ => {}

@@ -13,7 +13,7 @@ const COL_TITLES: [&str; 3] = ["📝 TODO", "⏳ IN PROGRESS", "✅ WAITING"];
 //
 // TEXT     texto principal, maxima legibilidad
 // DIM      secundario pero que hay que poder leer (ayuda, titulos de Claude)
-// FAINT    verdaderamente accesorio (ubicacion del pane, "sin nota")
+// FAINT    verdaderamente accesorio (ubicacion del pane, "no note")
 const TEXT: Color = Color::White;
 const DIM: Color = Color::Rgb(200, 200, 210);
 const FAINT: Color = Color::Rgb(140, 140, 150);
@@ -41,7 +41,7 @@ pub fn draw(f: &mut Frame, app: &App) {
         .border_type(BorderType::Rounded)
         .title(Span::styled(
             format!(
-                " CLAUDE KANBAN · {} sesiones ",
+                " CLAUDE KANBAN · {} sessions ",
                 app.panes.len()
             ),
             Style::default().add_modifier(Modifier::BOLD),
@@ -120,7 +120,7 @@ fn draw_lanes(f: &mut Frame, area: Rect, app: &App) {
 
     if visible.is_empty() {
         f.render_widget(
-            Paragraph::new("\n  Tablero vacio. [n] crea tu primer prompt.")
+            Paragraph::new("\n  Empty board. [n] creates your first prompt.")
                 .style(Style::default().fg(FAINT)),
             area,
         );
@@ -335,7 +335,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         }
         _ => out.push(Line::from(vec![
             bar(sel, color),
-            Span::styled(" · sin nota", Style::default().fg(FAINT)),
+            Span::styled(" · no note", Style::default().fg(FAINT)),
         ])),
     }
 
@@ -358,7 +358,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         let age = now().saturating_sub(n.touched);
         if age >= STALE_SECS && (!n.doing.is_empty() || !n.next.is_empty()) {
             foot.push(Span::styled(
-                format!(" · nota {}", fmt_dur(age)),
+                format!(" · note {}", fmt_dur(age)),
                 Style::default().fg(FAINT),
             ));
         }
@@ -370,8 +370,8 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
-        Mode::Board => "[←→↑↓] nav  [J/K] mover lane  [1-6] asignar  [n]uevo [e]dit [d]el  [y] copiar  [s] enviar  [enter] saltar  [R] renombrar  [?] ayuda  [q] salir",
-        _ => "[esc] cancelar",
+        Mode::Board => "[←→↑↓] nav  [J/K] move swimlane  [1-6] assign  [n]ew [e]dit [d]el  [y] copy  [s] send  [enter] jump  [R] rename  [?] help  [q] quit",
+        _ => "[esc] cancel",
     };
     let line = Line::from(vec![
         Span::styled(
@@ -404,9 +404,9 @@ fn draw_prompt_editor(f: &mut Frame, area: Rect, editing: bool, buf: &str) {
     let a = centered(area, 80, 70);
     f.render_widget(Clear, a);
     let title = if editing {
-        " editar prompt "
+        " edit prompt "
     } else {
-        " prompt nuevo "
+        " new prompt "
     };
     let block = Block::default()
         .borders(Borders::ALL)
@@ -417,7 +417,7 @@ fn draw_prompt_editor(f: &mut Frame, area: Rect, editing: bool, buf: &str) {
             Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [ctrl-s] guardar · [esc] cancelar · [enter] nueva linea ",
+            " [ctrl-s] save · [esc] cancel · [enter] new line ",
             Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
@@ -438,11 +438,11 @@ fn draw_note_editor(f: &mut Frame, area: Rect, doing: &str, next: &str, field: u
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(Color::Green))
         .title(Span::styled(
-            " nota del pane ",
+            " pane note ",
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [tab] cambiar campo · [ctrl-s] guardar · [esc] cancelar ",
+            " [tab] switch field · [ctrl-s] save · [esc] cancel ",
             Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
@@ -464,7 +464,7 @@ fn draw_note_editor(f: &mut Frame, area: Rect, doing: &str, next: &str, field: u
             Style::default().fg(FAINT)
         })
     };
-    f.render_widget(lbl("▸ que estoy haciendo", field == 0), rows[0]);
+    f.render_widget(lbl("▸ what I am doing", field == 0), rows[0]);
     f.render_widget(
         Paragraph::new(if field == 0 {
             format!("{}█", doing)
@@ -474,7 +474,7 @@ fn draw_note_editor(f: &mut Frame, area: Rect, doing: &str, next: &str, field: u
         .wrap(Wrap { trim: false }),
         rows[1],
     );
-    f.render_widget(lbl("↳ que espero despues", field == 1), rows[2]);
+    f.render_widget(lbl("↳ what I expect next", field == 1), rows[2]);
     f.render_widget(
         Paragraph::new(if field == 1 {
             format!("{}█", next)
@@ -495,11 +495,11 @@ fn draw_rename(f: &mut Frame, area: Rect, lane: usize, buf: &str, app: &App) {
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(color))
         .title(Span::styled(
-            format!(" renombrar lane {} ", app.store.position_of(lane) + 1),
+            format!(" rename swimlane {} ", app.store.position_of(lane) + 1),
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [enter] guardar · [esc] cancelar ",
+            " [enter] save · [esc] cancel ",
             Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
@@ -515,11 +515,11 @@ fn draw_send(f: &mut Frame, area: Rect, targets: &[(String, String)], sel: usize
         .border_type(BorderType::Double)
         .border_style(Style::default().fg(Color::Yellow))
         .title(Span::styled(
-            " ¿a que pane lo escribo? ",
+            " Send to which pane? ",
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [↑↓] elegir · [enter] escribir y saltar · [esc] cancelar ",
+            " [↑↓] choose · [enter] type and jump · [esc] cancel ",
             Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
@@ -531,12 +531,12 @@ fn draw_send(f: &mut Frame, area: Rect, targets: &[(String, String)], sel: usize
             Line::from(vec![
                 Span::styled("▸ ", Style::default().fg(TEXT)),
                 Span::styled(
-                    "= misma swimlane que el prompt",
+                    "= same swimlane as the prompt",
                     Style::default().fg(DIM),
                 ),
             ]),
             Line::from(Span::styled(
-                "Se escribe en el pane y saltamos alli: revisa y pulsa Enter.",
+                "The text is typed into the pane and you jump there — review it, then press Enter.",
                 Style::default().fg(DIM),
             )),
         ])),
@@ -572,58 +572,58 @@ fn draw_help(f: &mut Frame, area: Rect) {
         .borders(Borders::ALL)
         .border_type(BorderType::Double)
         .title(Span::styled(
-            " ayuda ",
+            " help ",
             Style::default().add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [esc] cerrar ",
+            " [esc] close ",
             Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
 
     let t = "\
- NAVEGAR
-   ←  →        cambiar de columna
-   ↑  ↓        moverse entre tarjetas
-   enter       saltar al pane (IN PROGRESS / WAITING)
+ NAVIGATE
+   ←  →        switch column
+   ↑  ↓        move between cards
+   enter       jump to the pane (IN PROGRESS / WAITING)
 
- ORGANIZAR
-   1 … 6       mover la tarjeta a la swimlane en esa posicion
-   R           renombrar la swimlane de la seleccion
-   shift+J     bajar la swimlane entera una posicion
-   shift+K     subirla (tambien shift+↓ / shift+↑)
+ ORGANIZE
+   1 … 6       move the card to the swimlane in that position
+   R           rename the swimlane of the selection
+   shift+J     move the whole swimlane down one position
+   shift+K     move it up (also shift+↓ / shift+↑)
 
-   Las teclas 1-6 van por POSICION: la 1 es siempre la
-   swimlane de arriba. Al reordenar, los numeros se
-   reasignan solos para que sigan coincidiendo con lo
-   que ves.
+   Keys 1-6 go by POSITION: 1 is always the top
+   swimlane. When you reorder, the numbers are
+   reassigned on their own so they keep matching what
+   you see.
 
- PROMPTS (columna TODO)
-   n           prompt nuevo (editor a pantalla completa)
-   e           editar el prompt seleccionado
-   d           borrar el prompt seleccionado
-   y           copiar al portapapeles
-   s           escribir el prompt en un pane y saltar alli.
-               Pide confirmacion del destino y NO manda Enter:
-               llegas al pane con el texto puesto, revisas y
-               pulsas Enter para lanzarlo.
+ PROMPTS (TODO column)
+   n           new prompt (full screen editor)
+   e           edit the selected prompt
+   d           delete the selected prompt
+   y           copy to the clipboard
+   s           type the prompt into a pane and jump there.
+               It asks which pane and does NOT send Enter:
+               you land on the pane with the text in place,
+               review it and press Enter to run it.
 
  PANES
-   e           editar la nota: que haces / que esperas despues
+   e           edit the note: what you do / what you expect
 
- OTROS
-   r           refrescar ya
-   q           salir
+ OTHER
+   r           refresh now
+   q           quit
 
- NOTAS
-   El estado (trabajando / te espera) se detecta por el titulo
-   que Claude Code escribe en el pane. Si una version futura
-   cambia ese formato, la clasificacion se rompe: el patron
-   esta aislado en src/tmux.rs.
+ NOTES
+   The state (working / waiting for you) is detected from the
+   title Claude Code writes in the pane. If a future version
+   changes that format, the classification breaks: the pattern
+   is isolated in src/tmux.rs.
 
-   Los tiempos se cuentan desde que arranca el tablero: tmux no
-   guarda desde cuando un pane esta en su estado, asi que al
-   abrir empiezan todos en cero.";
+   Times are counted from when the board starts: tmux does not
+   record since when a pane has been in its state, so on open
+   they all start at zero.";
     f.render_widget(Paragraph::new(t), inner);
 }
