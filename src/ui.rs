@@ -8,6 +8,18 @@ use ratatui::widgets::*;
 
 const COL_TITLES: [&str; 3] = ["📝 TODO", "⏳ IN PROGRESS", "✅ WAITING"];
 
+// Paleta por funcion, no por color. DarkGray desaparece casi por completo:
+// sobre fondos oscuros habituales queda por debajo de un contraste legible.
+//
+// TEXT     texto principal, maxima legibilidad
+// DIM      secundario pero que hay que poder leer (ayuda, titulos de Claude)
+// FAINT    verdaderamente accesorio (ubicacion del pane, "sin nota")
+const TEXT: Color = Color::White;
+const DIM: Color = Color::Rgb(200, 200, 210);
+const FAINT: Color = Color::Rgb(140, 140, 150);
+/// Cabecera de columna inactiva: se distingue de la activa sin perderse.
+const HEAD_OFF: Color = Color::Rgb(165, 165, 178);
+
 /// Colores por lane, para que el ojo agrupe sin leer.
 const LANE_COLORS: [Color; N_LANES] = [
     Color::Cyan,
@@ -75,10 +87,10 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
         let active = app.col.idx() == i;
         let style = if active {
             Style::default()
-                .fg(Color::White)
+                .fg(TEXT)
                 .add_modifier(Modifier::BOLD | Modifier::REVERSED)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(HEAD_OFF)
         };
         let n = app.column_cells(Col::from_idx(i)).len();
         f.render_widget(
@@ -104,7 +116,7 @@ fn draw_lanes(f: &mut Frame, area: Rect, app: &App) {
     if visible.is_empty() {
         f.render_widget(
             Paragraph::new("\n  Tablero vacio. [n] crea tu primer prompt.")
-                .style(Style::default().fg(Color::DarkGray)),
+                .style(Style::default().fg(FAINT)),
             area,
         );
         return;
@@ -240,7 +252,7 @@ fn prompt_card(app: &App, lane: usize, i: usize, color: Color, w: u16) -> Vec<Li
     let base = if sel {
         Style::default().add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::Gray)
+        Style::default().fg(DIM)
     };
 
     let mut out: Vec<Line> = lines
@@ -251,7 +263,7 @@ fn prompt_card(app: &App, lane: usize, i: usize, color: Color, w: u16) -> Vec<Li
     if lines.len() > 4 {
         out.push(Line::from(vec![
             bar(sel, color),
-            Span::styled(" …", Style::default().fg(Color::DarkGray)),
+            Span::styled(" …", Style::default().fg(FAINT)),
         ]));
     }
     out.push(Line::from(""));
@@ -264,9 +276,9 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
     let inner_w = w.saturating_sub(3) as usize;
 
     let head_style = if sel {
-        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+        Style::default().fg(TEXT).add_modifier(Modifier::BOLD)
     } else {
-        Style::default().fg(Color::White)
+        Style::default().fg(TEXT)
     };
 
     let mut out = vec![Line::from(vec![
@@ -275,7 +287,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         Span::styled(p.window.clone(), head_style),
         Span::styled(
             format!("  {}", p.loc),
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(FAINT),
         ),
     ])];
 
@@ -284,7 +296,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         out.push(Line::from(vec![
             bar(sel, color),
             Span::raw(" "),
-            Span::styled(l, Style::default().fg(Color::Gray)),
+            Span::styled(l, Style::default().fg(DIM)),
         ]));
     }
 
@@ -299,7 +311,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
                             if k == 0 { " ▸ " } else { "   " },
                             Style::default().fg(Color::Cyan),
                         ),
-                        Span::styled(l, Style::default().fg(Color::White)),
+                        Span::styled(l, Style::default().fg(TEXT)),
                     ]));
                 }
             }
@@ -309,16 +321,16 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
                         bar(sel, color),
                         Span::styled(
                             if k == 0 { " ↳ " } else { "   " },
-                            Style::default().fg(Color::DarkGray),
+                            Style::default().fg(FAINT),
                         ),
-                        Span::styled(l, Style::default().fg(Color::Gray)),
+                        Span::styled(l, Style::default().fg(DIM)),
                     ]));
                 }
             }
         }
         _ => out.push(Line::from(vec![
             bar(sel, color),
-            Span::styled(" · sin nota", Style::default().fg(Color::DarkGray)),
+            Span::styled(" · sin nota", Style::default().fg(FAINT)),
         ])),
     }
 
@@ -334,7 +346,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         Style::default().fg(if long_wait {
             Color::Yellow
         } else {
-            Color::DarkGray
+            FAINT
         }),
     ));
     if let Some(n) = app.store.notes.get(&p.id) {
@@ -342,7 +354,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         if age >= STALE_SECS && (!n.doing.is_empty() || !n.next.is_empty()) {
             foot.push(Span::styled(
                 format!(" · nota {}", fmt_dur(age)),
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(FAINT),
             ));
         }
     }
@@ -361,7 +373,7 @@ fn draw_status(f: &mut Frame, area: Rect, app: &App) {
             format!(" {} ", app.status),
             Style::default().fg(Color::Black).bg(Color::Cyan),
         ),
-        Span::styled(format!(" {}", keys), Style::default().fg(Color::DarkGray)),
+        Span::styled(format!(" {}", keys), Style::default().fg(DIM)),
     ]);
     f.render_widget(Paragraph::new(line), area);
 }
@@ -401,7 +413,7 @@ fn draw_prompt_editor(f: &mut Frame, area: Rect, editing: bool, buf: &str) {
         ))
         .title_bottom(Span::styled(
             " [ctrl-s] guardar · [esc] cancelar · [enter] nueva linea ",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
@@ -426,7 +438,7 @@ fn draw_note_editor(f: &mut Frame, area: Rect, doing: &str, next: &str, field: u
         ))
         .title_bottom(Span::styled(
             " [tab] cambiar campo · [ctrl-s] guardar · [esc] cancelar ",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
@@ -444,7 +456,7 @@ fn draw_note_editor(f: &mut Frame, area: Rect, doing: &str, next: &str, field: u
         Paragraph::new(s).style(if on {
             Style::default().fg(Color::Green).add_modifier(Modifier::BOLD)
         } else {
-            Style::default().fg(Color::DarkGray)
+            Style::default().fg(FAINT)
         })
     };
     f.render_widget(lbl("▸ que estoy haciendo", field == 0), rows[0]);
@@ -483,7 +495,7 @@ fn draw_rename(f: &mut Frame, area: Rect, lane: usize, buf: &str, app: &App) {
         ))
         .title_bottom(Span::styled(
             " [enter] guardar · [esc] cancelar ",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
@@ -503,8 +515,8 @@ fn draw_send(f: &mut Frame, area: Rect, targets: &[(String, String)], sel: usize
             Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
         ))
         .title_bottom(Span::styled(
-            " [↑↓] elegir · [enter] escribir (SIN Enter) · [esc] cancelar ",
-            Style::default().fg(Color::DarkGray),
+            " [↑↓] elegir · [enter] escribir y saltar · [esc] cancelar ",
+            Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
@@ -513,15 +525,15 @@ fn draw_send(f: &mut Frame, area: Rect, targets: &[(String, String)], sel: usize
     f.render_widget(
         Paragraph::new(Text::from(vec![
             Line::from(vec![
-                Span::styled("▸ ", Style::default().fg(Color::White)),
+                Span::styled("▸ ", Style::default().fg(TEXT)),
                 Span::styled(
                     "= misma swimlane que el prompt",
-                    Style::default().fg(Color::Gray),
+                    Style::default().fg(DIM),
                 ),
             ]),
             Line::from(Span::styled(
-                "Se escribira en el pane SIN pulsar Enter: lo revisas y lo lanzas tu.",
-                Style::default().fg(Color::DarkGray),
+                "Se escribe en el pane y saltamos alli: revisa y pulsa Enter.",
+                Style::default().fg(DIM),
             )),
         ])),
         rows[0],
@@ -539,9 +551,9 @@ fn draw_send(f: &mut Frame, area: Rect, targets: &[(String, String)], sel: usize
                     .bg(Color::Yellow)
                     .add_modifier(Modifier::BOLD)
             } else if same_lane {
-                Style::default().fg(Color::White)
+                Style::default().fg(TEXT)
             } else {
-                Style::default().fg(Color::DarkGray)
+                Style::default().fg(FAINT)
             };
             ListItem::new(format!(" {} ", label)).style(st)
         })
@@ -561,7 +573,7 @@ fn draw_help(f: &mut Frame, area: Rect) {
         ))
         .title_bottom(Span::styled(
             " [esc] cerrar ",
-            Style::default().fg(Color::DarkGray),
+            Style::default().fg(DIM),
         ));
     let inner = block.inner(a);
     f.render_widget(block, a);
@@ -581,8 +593,10 @@ fn draw_help(f: &mut Frame, area: Rect) {
    e           editar el prompt seleccionado
    d           borrar el prompt seleccionado
    y           copiar al portapapeles
-   s           escribir el prompt en un pane (pide confirmacion,
-               NO manda Enter: lo revisas y lo lanzas tu)
+   s           escribir el prompt en un pane y saltar alli.
+               Pide confirmacion del destino y NO manda Enter:
+               llegas al pane con el texto puesto, revisas y
+               pulsas Enter para lanzarlo.
 
  PANES
    e           editar la nota: que haces / que esperas despues

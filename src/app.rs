@@ -376,9 +376,14 @@ impl App {
         self.store.prompts.remove(prompt_idx);
 
         self.mode = Mode::Board;
-        self.status = "escrito en el pane SIN Enter — revisalo y lanzalo tu".into();
+        self.status = "escrito en el pane — pulsa Enter alli para lanzarlo".into();
+        // Persistimos ANTES de saltar: el foco se va a otro pane y no volvemos
+        // a pasar por aqui.
         self.persist();
         self.clamp();
+
+        // Saltamos al pane destino para que baste con pulsar Enter.
+        tmux::focus_pane(&pane_id);
     }
 
     pub fn focus_selected(&mut self) {
