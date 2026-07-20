@@ -30,6 +30,14 @@ pub struct Note {
 pub struct Store {
     /// Nombres de las 6 lanes. Vacio = sin bautizar.
     pub lane_names: Vec<String>,
+    /// Orden de pintado: posicion -> indice de lane.
+    ///
+    /// Separamos identidad de posicion a proposito. El indice de lane es lo que
+    /// usan las teclas 1-6 y lo que guardamos en pane_lane; si al reordenar
+    /// permutasemos los indices, la tecla 2 dejaria de llevar a la lane que el
+    /// usuario tiene asociada al 2. Aqui solo cambia donde se dibuja.
+    #[serde(default = "default_order")]
+    pub lane_order: Vec<usize>,
     pub prompts: Vec<Prompt>,
     /// pane_id -> lane
     pub pane_lane: HashMap<String, usize>,
@@ -37,10 +45,15 @@ pub struct Store {
     pub notes: HashMap<String, Note>,
 }
 
+fn default_order() -> Vec<usize> {
+    (0..N_LANES).collect()
+}
+
 impl Default for Store {
     fn default() -> Self {
         Store {
             lane_names: vec![String::new(); N_LANES],
+            lane_order: default_order(),
             prompts: Vec::new(),
             pane_lane: HashMap::new(),
             notes: HashMap::new(),
@@ -75,6 +88,7 @@ impl Store {
                 let mut st: Store = serde_json::from_str(&s).unwrap_or_default();
                 // Defensivo: si el fichero viene de una version con otro N_LANES.
                 st.lane_names.resize(N_LANES, String::new());
+                st.fix_order();
                 st
             }
             Err(_) => Store::default(),
@@ -107,6 +121,56 @@ impl Store {
 
     pub fn lane_of(&self, pane_id: &str) -> usize {
         *self.pane_lane.get(pane_id).unwrap_or(&0)
+    }
+
+    /// Deja lane_order como una permutacion valida de 0..N_LANES.
+    ///
+    /// Un fichero editado a mano o de otra version podria traer duplicados,
+    /// indices fuera de rango o faltantes; sin esto perderiamos lanes al
+    /// pintar. Conservamos el orden de lo que sea valido y anadimos al final
+    /// lo que falte.
+    pub fn fix_order(&mut self) {
+        let mut seen = vec![false; N_LANES];
+        let mut clean = Vec::with_capacity(N_LANES);
+        for &i in &self.lane_order {
+            if i < N_LANES && !seen[i] {
+                seen[i] = true;
+                clean.push(i);
+            }
+        }
+        for i in 0..N_LANES {
+            if !seen[i] {
+                clean.push(i);
+            }
+        }
+        self.lane_order = clean;
+    }
+
+    /// Posicion de pintado de una lane.
+    pub fn position_of(&self, lane: usize) -> usize {
+        self.lane_order
+            .iter()
+            .position(|&l| l == lane)
+            .unwrap_or(lane)
+    }
+
+    /// Intercambia una lane con su vecina. `down = true` la baja.
+    /// Devuelve false si ya esta en el extremo.
+    pub fn swap_lane(&mut self, lane: usize, down: bool) -> bool {
+        let pos = self.position_of(lane);
+        let other = if down {
+            if pos + 1 >= self.lane_order.len() {
+                return false;
+            }
+            pos + 1
+        } else {
+            if pos == 0 {
+                return false;
+            }
+            pos - 1
+        };
+        self.lane_order.swap(pos, other);
+        true
     }
 }
 

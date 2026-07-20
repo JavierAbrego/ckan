@@ -1,6 +1,6 @@
 //! Estado en memoria del tablero y la logica de navegacion.
 
-use crate::store::{now, Note, Prompt, Store, N_LANES};
+use crate::store::{now, Note, Prompt, Store};
 use crate::tmux::{self, Pane, State};
 use std::collections::HashMap;
 
@@ -150,7 +150,8 @@ impl App {
     /// Devuelve (lane, indice dentro de prompts/panes).
     pub fn column_cells(&self, col: Col) -> Vec<(usize, usize)> {
         let mut out = Vec::new();
-        for lane in 0..N_LANES {
+        // En el orden de pintado, para que ↑↓ siga lo que se ve en pantalla.
+        for lane in self.store.lane_order.clone() {
             let items = if col == Col::Todo {
                 self.prompts_in(lane)
             } else {
@@ -208,6 +209,38 @@ impl App {
         self.status = format!("→ {}", label);
         self.persist();
         self.clamp();
+    }
+
+    /// Mueve la lane de la seleccion una posicion arriba/abajo, con todo su
+    /// contenido (nombre, prompts, panes). No cambia el indice de la lane, asi
+    /// que las teclas 1-6 siguen llevando a la misma lane de siempre.
+    pub fn move_lane(&mut self, down: bool) {
+        let Some((lane, item)) = self.selected() else {
+            self.status = "nada seleccionado".into();
+            return;
+        };
+        if !self.store.swap_lane(lane, down) {
+            self.status = if down {
+                "ya es la ultima lane".into()
+            } else {
+                "ya es la primera lane".into()
+            };
+            return;
+        }
+
+        // La selecion debe seguir a la tarjeta, no quedarse en la misma fila:
+        // tras mover la lane, esa fila muestra contenido de otra lane.
+        if let Some(row) = self
+            .column_cells(self.col)
+            .iter()
+            .position(|&(l, i)| l == lane && i == item)
+        {
+            self.row = row;
+        }
+
+        let label = self.store.lane_label(lane);
+        self.status = format!("{} → posicion {}", label, self.store.position_of(lane) + 1);
+        self.persist();
     }
 
     pub fn persist(&mut self) {

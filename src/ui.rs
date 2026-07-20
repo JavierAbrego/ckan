@@ -103,8 +103,13 @@ fn draw_header(f: &mut Frame, area: Rect, app: &App) {
 fn draw_lanes(f: &mut Frame, area: Rect, app: &App) {
     // Mostramos toda lane con contenido en CUALQUIER columna, mas la lane de
     // la seleccion actual (para poder moverte a una vacia y verla).
+    // Recorremos en el orden de pintado del usuario, no por indice de lane.
     let sel_lane = app.selected().map(|(l, _)| l);
-    let visible: Vec<usize> = (0..N_LANES)
+    let visible: Vec<usize> = app
+        .store
+        .lane_order
+        .iter()
+        .copied()
         .filter(|&l| {
             !app.prompts_in(l).is_empty()
                 || !app.panes_in(l, Col::InProgress).is_empty()
@@ -365,7 +370,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
-        Mode::Board => "[←→↑↓] nav  [1-6] lane  [n]uevo [e]dit [d]el  [y] copiar  [s] enviar  [enter] saltar  [R] renombrar  [?] ayuda  [q] salir",
+        Mode::Board => "[←→↑↓] nav  [J/K] mover lane  [1-6] asignar  [n]uevo [e]dit [d]el  [y] copiar  [s] enviar  [enter] saltar  [R] renombrar  [?] ayuda  [q] salir",
         _ => "[esc] cancelar",
     };
     let line = Line::from(vec![
@@ -587,6 +592,12 @@ fn draw_help(f: &mut Frame, area: Rect) {
  ORGANIZAR
    1 … 6       mover la tarjeta a esa swimlane
    R           renombrar la swimlane de la seleccion
+   shift+J     bajar la swimlane entera una posicion
+   shift+K     subirla (tambien shift+↓ / shift+↑)
+
+   Reordenar cambia solo donde se pinta la lane: su numero
+   no cambia, asi que la tecla que la selecciona sigue
+   siendo la misma.
 
  PROMPTS (columna TODO)
    n           prompt nuevo (editor a pantalla completa)

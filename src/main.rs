@@ -233,9 +233,15 @@ fn on_key(app: &mut App, k: KeyEvent) {
 }
 
 fn on_board_key(app: &mut App, k: KeyEvent, _ctrl: bool) {
+    let shift = k.modifiers.contains(KeyModifiers::SHIFT);
     match k.code {
         KeyCode::Char('q') => app.should_quit = true,
         KeyCode::Char('?') => app.mode = Mode::Help,
+        // Shift+J/K mueven la lane entera; van antes que las minusculas.
+        KeyCode::Char('J') => app.move_lane(true),
+        KeyCode::Char('K') => app.move_lane(false),
+        KeyCode::Down if shift => app.move_lane(true),
+        KeyCode::Up if shift => app.move_lane(false),
         KeyCode::Left | KeyCode::Char('h') => app.move_col(-1),
         KeyCode::Right | KeyCode::Char('l') => app.move_col(1),
         KeyCode::Up | KeyCode::Char('k') => app.move_row(-1),
