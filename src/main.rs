@@ -55,6 +55,12 @@ fn run<B: Backend>(term: &mut Terminal<B>) -> io::Result<()> {
     let mut last = Instant::now();
 
     loop {
+        // Antes de dibujar, fijamos las sub-columnas por seccion segun el ancho
+        // actual: la navegacion ←→ lo consulta para moverse entre sub-columnas
+        // antes de saltar de seccion.
+        if let Ok(sz) = term.size() {
+            app.section_cols = ui::section_cols_for_terminal(sz.width);
+        }
         term.draw(|f| ui::draw(f, &app))?;
 
         if event::poll(TICK)? {

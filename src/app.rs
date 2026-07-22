@@ -11,6 +11,20 @@ pub enum Col {
     Waiting = 2,
 }
 
+/// Posicion visual de una tarjeta dentro de la seccion activa, usada por la
+/// navegacion 2D (←→ entre sub-columnas, ↑↓ dentro de una sub-columna).
+#[derive(Debug, Clone, Copy)]
+struct Cell {
+    /// Indice lineal en column_cells (lo que guarda `App::row`).
+    row: usize,
+    /// Posicion de la lane en el orden de pintado.
+    lane_pos: usize,
+    /// Sub-columna: 0 = izquierda, 1 = derecha.
+    subcol: usize,
+    /// Fila dentro de la sub-columna de esa lane.
+    vrow: usize,
+}
+
 impl Col {
     pub fn idx(self) -> usize {
         self as usize
@@ -69,6 +83,10 @@ pub struct App {
     pub mode: Mode,
     pub status: String,
     pub should_quit: bool,
+    /// Sub-columnas por seccion en el ultimo pintado (1 o 2). Lo fija el
+    /// dibujado segun el ancho de pantalla; la navegacion ←→ lo consulta para
+    /// moverse entre sub-columnas antes de saltar de seccion.
+    pub section_cols: usize,
 }
 
 impl App {
@@ -83,6 +101,7 @@ impl App {
             mode: Mode::Board,
             status: "ready".into(),
             should_quit: false,
+            section_cols: 1,
         };
         a.refresh();
         a
@@ -177,18 +196,93 @@ impl App {
         self.column_cells(self.col).get(self.row).copied()
     }
 
+    /// Geometria visual de la seccion activa: una celda por tarjeta con su
+    /// indice lineal (`row` en column_cells) y su posicion en pantalla
+    /// (lane en orden de pintado, sub-columna 0/1, y fila dentro de la
+    /// sub-columna). Reproduce el reparto del dibujado: dentro de cada lane la
+    /// primera mitad de las tarjetas (ceil) va a la sub-columna izquierda y el
+    /// resto a la derecha, cuando hay dos sub-columnas.
+    fn grid(&self) -> Vec<Cell> {
+        let ncol = self.section_cols.max(1);
+        let mut out = Vec::new();
+        let mut row = 0usize; // indice lineal, en el mismo orden que column_cells
+        for (lane_pos, lane) in self.store.lane_order.iter().copied().enumerate() {
+            let items = if self.col == Col::Todo {
+                self.prompts_in(lane)
+            } else {
+                self.panes_in(lane, self.col)
+            };
+            let n = items.len();
+            // Corte izquierda/derecha, igual que el dibujado.
+            let split = if ncol >= 2 { n.div_ceil(2) } else { n };
+            for (k, _) in items.iter().enumerate() {
+                let (subcol, vrow) = if k < split {
+                    (0usize, k)
+                } else {
+                    (1usize, k - split)
+                };
+                out.push(Cell {
+                    row,
+                    lane_pos,
+                    subcol,
+                    vrow,
+                });
+                row += 1;
+            }
+        }
+        out
+    }
+
     pub fn move_col(&mut self, d: i32) {
+        // Primero intentamos movernos entre sub-columnas de la misma seccion;
+        // solo si ya estamos en el borde saltamos a la seccion contigua.
+        let grid = self.grid();
+        if let Some(cur) = grid.iter().find(|c| c.row == self.row).copied() {
+            let target_sub = cur.subcol as i32 + d;
+            if target_sub >= 0 {
+                // Buscamos en la MISMA lane la sub-columna destino, a la fila
+                // visual mas cercana. Si existe, nos quedamos en esta seccion.
+                let candidates: Vec<&Cell> = grid
+                    .iter()
+                    .filter(|c| c.lane_pos == cur.lane_pos && c.subcol as i32 == target_sub)
+                    .collect();
+                if let Some(best) = candidates
+                    .iter()
+                    .min_by_key(|c| (c.vrow as i32 - cur.vrow as i32).abs())
+                {
+                    self.row = best.row;
+                    return;
+                }
+            }
+        }
+        // Borde de la seccion: cambiamos de columna (TODO/IN PROGRESS/WAITING).
         let i = self.col.idx() as i32 + d;
-        self.col = Col::from_idx(i.clamp(0, 2) as usize);
-        self.row = 0;
+        let new = Col::from_idx(i.clamp(0, 2) as usize);
+        if new != self.col {
+            self.col = new;
+            self.row = 0;
+        }
     }
 
     pub fn move_row(&mut self, d: i32) {
-        let n = self.column_cells(self.col).len() as i32;
-        if n == 0 {
+        // ↑↓ se mueve dentro de la sub-columna actual. Con una sola sub-columna
+        // esto es el recorrido lineal de siempre.
+        let grid = self.grid();
+        if grid.is_empty() {
             return;
         }
-        self.row = ((self.row as i32 + d).rem_euclid(n)) as usize;
+        let Some(cur) = grid.iter().find(|c| c.row == self.row).copied() else {
+            return;
+        };
+        // Celdas de la misma sub-columna (atravesando lanes), en orden de
+        // pintado. Nos movemos por esa lista con envoltura.
+        let column: Vec<&Cell> = grid.iter().filter(|c| c.subcol == cur.subcol).collect();
+        if let Some(pos) = column.iter().position(|c| c.row == self.row) {
+            let np = ((pos as i32 + d).rem_euclid(column.len() as i32)) as usize;
+            self.row = column[np].row;
+        } else if d != 0 {
+            self.row = ((self.row as i32 + d).rem_euclid(grid.len() as i32)) as usize;
+        }
     }
 
     /// Manda la tarjeta seleccionada a la lane que ocupa esa POSICION.

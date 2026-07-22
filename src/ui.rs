@@ -134,59 +134,139 @@ fn draw_lanes(f: &mut Frame, area: Rect, app: &App) {
         return;
     }
 
-    // Altura que pide cada lane segun su columna mas cargada. Usamos Length
-    // (no Min) y un relleno al final: con Min, la primera lane absorbe todo el
-    // espacio sobrante y empuja las demas fuera de pantalla.
+    // Altura NATURAL que pide cada lane segun su columna mas cargada. Ya no la
+    // comprimimos para que quepa: si el total desborda la pantalla, hacemos
+    // scroll vertical. Asi caben mas agentes de los que entran a la vez y cada
+    // tarjeta conserva su tamano legible.
+    // Ancho de una seccion (una de las tres columnas dentro de la lane), para
+    // saber si el render la partira en dos sub-columnas y cuantas filas de
+    // tarjeta ocupara entonces.
+    let inner_w = area.width.saturating_sub(2);
+    let sec_w = col_areas(Rect { x: 0, y: 0, width: inner_w, height: 1 })
+        .first()
+        .map(|r| r.width)
+        .unwrap_or(inner_w);
+
     let want: Vec<u16> = visible
         .iter()
         .map(|&l| {
-            let cards = app
-                .prompts_in(l)
-                .len()
-                .max(app.panes_in(l, Col::InProgress).len())
-                .max(app.panes_in(l, Col::Waiting).len());
+            // Filas de tarjeta de la seccion mas cargada: en dos columnas, N
+            // tarjetas caben en ceil(N/2) filas, asi la lane no reserva de mas.
+            let rows = section_rows(app.prompts_in(l).len(), sec_w)
+                .max(section_rows(app.panes_in(l, Col::InProgress).len(), sec_w))
+                .max(section_rows(app.panes_in(l, Col::Waiting).len(), sec_w));
             // ~6 lineas por tarjeta de pane (cabecera + titulo + nota + pie +
             // blanca) y 2 de borde. Suelo de 5 para que una lane vacia se vea.
-            ((cards as u16 * 6) + 2).clamp(5, 26)
+            ((rows as u16 * 6) + 2).clamp(5, 26)
         })
         .collect();
 
-    // Si no cabe todo, recortamos proporcionalmente en vez de perder lanes.
-    let total: u16 = want.iter().sum();
+    // Coordenada Y (dentro del lienzo completo) donde empieza cada lane.
+    let mut starts: Vec<u16> = Vec::with_capacity(visible.len());
+    let mut acc = 0u16;
+    for &h in &want {
+        starts.push(acc);
+        acc = acc.saturating_add(h);
+    }
+    let content_h = acc; // alto total de todas las lanes apiladas
     let avail = area.height;
-    let heights: Vec<u16> = if total <= avail {
-        want
-    } else {
-        let min_h = 5u16;
-        let n = want.len() as u16;
-        if avail >= min_h * n {
-            // Reparto proporcional respetando el minimo.
-            want.iter()
-                .map(|&w| ((w as u32 * avail as u32 / total as u32) as u16).max(min_h))
-                .collect()
-        } else {
-            // Ni con el minimo caben: reparto a partes iguales.
-            vec![(avail / n).max(3); want.len()]
+
+    // Todo cabe: camino rapido sin scroll.
+    if content_h <= avail {
+        for (slot, &lane) in visible.iter().enumerate() {
+            let r = Rect {
+                x: area.x,
+                y: area.y + starts[slot],
+                width: area.width,
+                height: want[slot],
+            };
+            if r.height >= 3 {
+                draw_lane(f, r, app, lane);
+            }
         }
+        return;
+    }
+
+    // No cabe: calculamos el desplazamiento para que la lane seleccionada
+    // quede entera en pantalla (scroll que sigue al cursor).
+    let sel_slot = sel_lane.and_then(|sl| visible.iter().position(|&l| l == sl));
+    let max_scroll = content_h - avail;
+    let scroll = match sel_slot {
+        Some(s) => {
+            let top = starts[s];
+            let bottom = top.saturating_add(want[s]);
+            // Si la lane se sale por abajo, alinea su borde inferior con el area.
+            // Si se sale por arriba, alinea su borde superior. En medio, no toca.
+            let mut sc = 0u16;
+            if bottom > avail {
+                sc = bottom - avail;
+            }
+            if top < sc {
+                sc = top;
+            }
+            sc.min(max_scroll)
+        }
+        None => 0,
     };
 
-    let mut constraints: Vec<Constraint> =
-        heights.iter().map(|&h| Constraint::Length(h)).collect();
-    constraints.push(Constraint::Min(0)); // relleno: absorbe el sobrante
-
-    let chunks = Layout::vertical(constraints).split(area);
-
+    // Pintamos sobre un lienzo propio del alto TOTAL del contenido y luego
+    // copiamos al frame solo la franja visible [scroll, scroll+avail). Es la
+    // via limpia de scroll en ratatui: los widgets recortan a su Rect, pero un
+    // Rect no admite Y negativa, asi que desplazamos por copia de buffer.
+    let canvas = Rect {
+        x: area.x,
+        y: 0,
+        width: area.width,
+        height: content_h,
+    };
+    let mut buf = Buffer::empty(canvas);
     for (slot, &lane) in visible.iter().enumerate() {
-        if slot >= chunks.len().saturating_sub(1) {
-            break;
+        let r = Rect {
+            x: area.x,
+            y: starts[slot],
+            width: area.width,
+            height: want[slot],
+        };
+        if r.height >= 3 {
+            draw_lane_buf(&mut buf, r, app, lane);
         }
-        if chunks[slot].height >= 3 {
-            draw_lane(f, chunks[slot], app, lane);
+    }
+
+    // Copiamos la ventana visible al buffer del frame.
+    let dst = f.buffer_mut();
+    for row in 0..avail {
+        let src_y = scroll + row;
+        let dst_y = area.y + row;
+        for col in 0..area.width {
+            let x = area.x + col;
+            let cell = buf[(x, src_y)].clone();
+            dst[(x, dst_y)] = cell;
         }
+    }
+
+    // Indicadores de que hay mas contenido fuera de pantalla.
+    if scroll > 0 {
+        let s = Span::styled("▲ more", Style::default().fg(FAINT));
+        dst.set_span(area.x + area.width.saturating_sub(7), area.y, &s, 7);
+    }
+    if scroll < max_scroll {
+        let s = Span::styled("▼ more", Style::default().fg(FAINT));
+        dst.set_span(
+            area.x + area.width.saturating_sub(7),
+            area.y + avail.saturating_sub(1),
+            &s,
+            7,
+        );
     }
 }
 
 fn draw_lane(f: &mut Frame, area: Rect, app: &App, lane: usize) {
+    draw_lane_buf(f.buffer_mut(), area, app, lane);
+}
+
+/// Pinta una lane sobre un buffer arbitrario. Separado de `draw_lane` para
+/// poder reutilizarlo tanto contra el frame como contra el lienzo de scroll.
+fn draw_lane_buf(buf: &mut Buffer, area: Rect, app: &App, lane: usize) {
     let color = LANE_COLORS[lane];
     let block = Block::default()
         .borders(Borders::ALL)
@@ -197,25 +277,105 @@ fn draw_lane(f: &mut Frame, area: Rect, app: &App, lane: usize) {
             Style::default().fg(color).add_modifier(Modifier::BOLD),
         ));
     let inner = block.inner(area);
-    f.render_widget(block, area);
+    block.render(area, buf);
 
     let cols = col_areas(inner);
     for ci in 0..3 {
         let col = Col::from_idx(ci);
-        let items: Vec<Line> = if col == Col::Todo {
-            app.prompts_in(lane)
-                .iter()
-                .map(|&i| (i, ()))
-                .flat_map(|(i, _)| prompt_card(app, lane, i, color, cols[ci].width))
-                .collect()
-        } else {
-            app.panes_in(lane, col)
-                .iter()
-                .flat_map(|&i| pane_card(app, lane, i, col, color, cols[ci].width))
-                .collect()
-        };
-        f.render_widget(Paragraph::new(items), cols[ci]);
+        draw_section(buf, cols[ci], app, lane, col, color);
     }
+}
+
+/// Ancho minimo de una seccion para partirla en dos sub-columnas. Cada
+/// sub-columna se queda con ~la mitad; por debajo de esto no daria tarjetas
+/// legibles y mantenemos una sola pila vertical.
+const TWO_COL_MIN: u16 = 76;
+
+/// Cuantas sub-columnas usar en una seccion de este ancho.
+fn section_cols(width: u16) -> usize {
+    if width >= TWO_COL_MIN {
+        2
+    } else {
+        1
+    }
+}
+
+/// Sub-columnas por seccion dado el ancho TOTAL del terminal. La navegacion lo
+/// usa para saber cuando ←→ cambia de sub-columna en vez de saltar de seccion.
+/// Reproduce la cadena de recortes del dibujado: outer block (−2) → lane
+/// block (−2) → una de las tres secciones (~33%).
+pub fn section_cols_for_terminal(term_width: u16) -> usize {
+    let inner_lane = term_width.saturating_sub(2).saturating_sub(2);
+    let sec_w = col_areas(Rect {
+        x: 0,
+        y: 0,
+        width: inner_lane,
+        height: 1,
+    })
+    .first()
+    .map(|r| r.width)
+    .unwrap_or(inner_lane);
+    section_cols(sec_w)
+}
+
+/// Filas de tarjeta que ocupa una seccion de `n` tarjetas al ancho dado.
+/// Con dos sub-columnas, N tarjetas caben en ceil(N/2) filas.
+pub fn section_rows(n: usize, width: u16) -> usize {
+    let ncol = section_cols(width);
+    n.div_ceil(ncol)
+}
+
+/// Dibuja una seccion (TODO / IN PROGRESS / WAITING) de una lane. Si es ancha,
+/// reparte las tarjetas en dos sub-columnas: la primera mitad (redondeando
+/// hacia arriba) baja por la izquierda y el resto por la derecha, de modo que
+/// el recorrido visual coincide con el orden lineal de navegacion ↑↓.
+fn draw_section(buf: &mut Buffer, area: Rect, app: &App, lane: usize, col: Col, color: Color) {
+    // Indices de las tarjetas de esta seccion, en el mismo orden que usa la
+    // navegacion (column_cells recorre prompts_in / panes_in en este orden).
+    let idxs: Vec<usize> = if col == Col::Todo {
+        app.prompts_in(lane)
+    } else {
+        app.panes_in(lane, col)
+    };
+
+    let render_card = |i: usize, w: u16| -> Vec<Line<'static>> {
+        if col == Col::Todo {
+            prompt_card(app, lane, i, color, w)
+        } else {
+            pane_card(app, lane, i, col, color, w)
+        }
+    };
+
+    if section_cols(area.width) < 2 || idxs.len() < 2 {
+        let items: Vec<Line> = idxs
+            .iter()
+            .flat_map(|&i| render_card(i, area.width))
+            .collect();
+        Paragraph::new(items).render(area, buf);
+        return;
+    }
+
+    // Dos sub-columnas con un canal de 1 celda entre ellas.
+    let gap = 1u16;
+    let half = (area.width.saturating_sub(gap)) / 2;
+    let left = Rect { x: area.x, y: area.y, width: half, height: area.height };
+    let right = Rect {
+        x: area.x + half + gap,
+        y: area.y,
+        width: area.width - half - gap,
+        height: area.height,
+    };
+
+    // Primera mitad (redondeando hacia arriba) a la izquierda; el resto a la
+    // derecha. Asi ↑↓, que va en orden lineal, baja la izquierda y sigue por
+    // la derecha.
+    let split = idxs.len().div_ceil(2);
+    let (l, r) = idxs.split_at(split);
+
+    let left_items: Vec<Line> = l.iter().flat_map(|&i| render_card(i, left.width)).collect();
+    let right_items: Vec<Line> = r.iter().flat_map(|&i| render_card(i, right.width)).collect();
+    Paragraph::new(left_items).render(left, buf);
+    Paragraph::new(right_items).render(right, buf);
 }
 
 /// Marca si esta tarjeta es la seleccionada ahora mismo.
@@ -591,9 +751,19 @@ fn draw_help(f: &mut Frame, area: Rect) {
 
     let t = "\
  NAVIGATE
-   ←  →        switch column
-   ↑  ↓        move between cards
+   ←  →        move between cards; at the edge of a section
+               it switches column (TODO / IN PROGRESS / WAITING)
+   ↑  ↓        move up/down within the card column
    enter       jump to the pane (IN PROGRESS / WAITING)
+
+   On a wide screen each section lays its cards out in two
+   sub-columns. ←→ steps between them and only jumps to the
+   next section once you are at the outer edge.
+
+   When there are more swimlanes than fit on screen the
+   board scrolls to keep the selected card in view, so you
+   can run more agents than fit in the terminal height.
+   A ▲/▼ more marker shows when content is off-screen.
 
  ORGANIZE
    1 … 9       move the card to the swimlane in that position
