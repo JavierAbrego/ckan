@@ -9,12 +9,37 @@ use std::process::Command;
 
 /// Prefijo que Claude Code pone cuando esta idle esperando input.
 const IDLE_MARK: char = '\u{2733}'; // ✳
-/// Caracteres de spinner braille que usa mientras trabaja.
+/// Caracteres de spinner braille que usa mientras trabaja. Todos caen en el
+/// bloque Braille Patterns (U+2800..=U+28FF); ver `is_busy_mark`. Se conserva
+/// como registro de los frames vistos en la practica, aunque la deteccion use
+/// el rango completo.
+#[allow(dead_code)]
 const BUSY_MARKS: &[char] = &[
     '\u{2801}', '\u{2802}', '\u{2804}', '\u{2808}', '\u{2810}', '\u{2820}', '\u{2840}', '\u{2880}',
     '\u{2807}', '\u{280b}', '\u{280d}', '\u{2819}', '\u{2839}', '\u{2838}', '\u{283c}', '\u{2834}',
     '\u{2826}', '\u{2827}', '\u{2807}', '\u{280f}', '\u{2810}',
 ];
+
+/// Un caracter de spinner de trabajo. Aceptamos todo el bloque Braille
+/// (U+2800..=U+28FF), no solo la lista fija: Claude rota entre muchos frames y
+/// una version futura podria anadir mas. La lista de arriba se conserva por
+/// claridad de que frames hemos visto en la practica.
+fn is_busy_mark(c: char) -> bool {
+    ('\u{2800}'..='\u{28FF}').contains(&c)
+}
+
+/// Reconoce un pane de Claude Code por la marca que escribe al principio de su
+/// titulo: spinner braille mientras trabaja, o ✳ cuando te espera. Nos apoyamos
+/// en el TITULO y no en el nombre del comando (`pane_current_command`) porque
+/// ese depende de como se lance Claude: directo da "claude", pero un wrapper
+/// (p. ej. claude-guard.sh) deja "bash" y no lo detectariamos. La marca del
+/// titulo la escribe Claude, asi que sobrevive a cualquier lanzador.
+fn looks_like_claude(title: &str) -> bool {
+    match title.chars().next() {
+        Some(c) => c == IDLE_MARK || is_busy_mark(c),
+        None => false,
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
@@ -55,13 +80,15 @@ pub fn list_claude_panes() -> Vec<Pane> {
         if f.len() < 5 {
             continue;
         }
-        let (id, loc, window, cmd, title) = (f[0], f[1], f[2], f[3], f[4]);
-        if cmd != "claude" {
+        let (id, loc, window, _cmd, title) = (f[0], f[1], f[2], f[3], f[4]);
+        // Detectamos por la marca del titulo, no por el comando: asi funciona
+        // tanto con `claude` directo como bajo un wrapper (claude-guard.sh, cg).
+        if !looks_like_claude(title) {
             continue;
         }
 
         let first = title.chars().next().unwrap_or(' ');
-        let state = if BUSY_MARKS.contains(&first) {
+        let state = if is_busy_mark(first) {
             State::Working
         } else if first == IDLE_MARK {
             State::Waiting
