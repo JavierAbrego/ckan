@@ -453,15 +453,22 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
         Style::default().fg(TEXT)
     };
 
-    let mut out = vec![Line::from(vec![
+    let mut head = vec![
         bar(sel, color),
         Span::raw(" "),
         Span::styled(p.window.clone(), head_style),
-        Span::styled(
-            format!("  {}", p.loc),
-            Style::default().fg(FAINT),
-        ),
-    ])];
+        Span::styled(format!("  {}", p.loc), Style::default().fg(FAINT)),
+    ];
+    // Distintivo del modo continuous: ckan reactiva la sesion cuando se para.
+    if app.store.is_continuous(&p.id) {
+        head.push(Span::styled(
+            "  ⟳ cont",
+            Style::default()
+                .fg(Color::Green)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
+    let mut out = vec![Line::from(head)];
 
     // Titulo que Claude se autoasigna.
     for l in wrap(&p.title, inner_w).into_iter().take(2) {
@@ -537,7 +544,7 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
 
 fn draw_status(f: &mut Frame, area: Rect, app: &App) {
     let keys = match app.mode {
-        Mode::Board => "[←→↑↓] nav  [J/K] move swimlane  [1-9] assign  [n]ew [e]dit [d]el  [y] copy  [s] send  [enter] jump  [R] rename  [?] help  [q] quit",
+        Mode::Board => "[←→↑↓] nav  [J/K] move swimlane  [1-9] assign  [n]ew [e]dit [d]el  [y] copy  [s] send  [c]ontinuous  [enter] jump  [R] rename  [?] help  [q] quit",
         _ => "[esc] cancel",
     };
     let line = Line::from(vec![
@@ -788,6 +795,14 @@ fn draw_help(f: &mut Frame, area: Rect) {
 
  PANES
    e           edit the note: what you do / what you expect
+   c           toggle continuous mode on the session
+
+   Continuous mode (⟳ cont): whenever the session stops and
+   waits for you, ckan types 'continua' + Enter for you, so it
+   keeps going unattended. It asks Claude to set the pane title
+   to <CKAN_DONE> (via printf) when it has truly finished; ckan
+   sees that mark and switches the mode off on its own. Toggle
+   it off any time with c.
 
  OTHER
    r           refresh now

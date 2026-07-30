@@ -43,6 +43,10 @@ pub struct Store {
     pub pane_lane: HashMap<String, usize>,
     /// pane_id -> nota
     pub notes: HashMap<String, Note>,
+    /// Panes con el modo continuous activo. Cuando la sesion se para, ckan le
+    /// reescribe "continua" hasta que Claude marca el fin en el titulo.
+    #[serde(default)]
+    pub continuous: Vec<String>,
 }
 
 fn default_order() -> Vec<usize> {
@@ -57,6 +61,7 @@ impl Default for Store {
             prompts: Vec::new(),
             pane_lane: HashMap::new(),
             notes: HashMap::new(),
+            continuous: Vec::new(),
         }
     }
 }
@@ -99,6 +104,7 @@ impl Store {
     pub fn save(&mut self, live_ids: &[String]) {
         self.pane_lane.retain(|k, _| live_ids.contains(k));
         self.notes.retain(|k, _| live_ids.contains(k));
+        self.continuous.retain(|k| live_ids.contains(k));
         if let Ok(s) = serde_json::to_string_pretty(self) {
             let p = path();
             // Escritura atomica: si algo peta a media escritura, no corrompemos
@@ -130,6 +136,27 @@ impl Store {
 
     pub fn lane_of(&self, pane_id: &str) -> usize {
         *self.pane_lane.get(pane_id).unwrap_or(&0)
+    }
+
+    /// Si el pane tiene el modo continuous activo.
+    pub fn is_continuous(&self, pane_id: &str) -> bool {
+        self.continuous.iter().any(|p| p == pane_id)
+    }
+
+    /// Alterna el modo continuous de un pane. Devuelve el nuevo estado.
+    pub fn toggle_continuous(&mut self, pane_id: &str) -> bool {
+        if let Some(i) = self.continuous.iter().position(|p| p == pane_id) {
+            self.continuous.remove(i);
+            false
+        } else {
+            self.continuous.push(pane_id.to_string());
+            true
+        }
+    }
+
+    /// Apaga el modo continuous de un pane (Claude marco el fin).
+    pub fn clear_continuous(&mut self, pane_id: &str) {
+        self.continuous.retain(|p| p != pane_id);
     }
 
     /// Deja lane_order como una permutacion valida de 0..N_LANES.

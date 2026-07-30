@@ -261,6 +261,7 @@ fn on_board_key(app: &mut App, k: KeyEvent, _ctrl: bool) {
         KeyCode::Char('d') => app.delete_selected(),
         KeyCode::Char('y') => app.copy_selected(),
         KeyCode::Char('s') => app.start_send(),
+        KeyCode::Char('c') => app.toggle_continuous(),
         KeyCode::Char('R') => app.start_rename(),
         KeyCode::Char('r') => {
             app.refresh();

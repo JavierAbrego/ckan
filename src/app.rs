@@ -78,6 +78,11 @@ pub struct App {
     pub since: HashMap<String, u64>,
     /// pane_id -> estado en el ultimo refresco, para detectar transiciones.
     prev_state: HashMap<String, State>,
+    /// Modo continuous: pane_id -> "armado" para reenviar. Se arma al activar
+    /// el modo y cada vez que la sesion vuelve a trabajar; se desarma al enviar
+    /// "continua". Asi no repetimos el envio mientras sigue parada por lo mismo:
+    /// solo tras un nuevo ciclo de trabajo.
+    cont_armed: HashMap<String, bool>,
     pub col: Col,
     pub row: usize,
     pub mode: Mode,
@@ -96,6 +101,7 @@ impl App {
             panes: Vec::new(),
             since: HashMap::new(),
             prev_state: HashMap::new(),
+            cont_armed: HashMap::new(),
             col: Col::Todo,
             row: 0,
             mode: Mode::Board,
@@ -130,7 +136,62 @@ impl App {
 
         self.since.retain(|k, _| seen.contains(k));
         self.prev_state.retain(|k, _| seen.contains(k));
+        self.cont_armed.retain(|k, _| seen.contains(k));
+
+        self.drive_continuous();
         self.clamp();
+    }
+
+    /// Mensaje que el modo continuous escribe cuando la sesion se para. Ademas
+    /// de pedir que siga, le indica como avisar de que ha terminado del todo:
+    /// fijando el titulo del pane al marcador con un printf. ckan detecta ese
+    /// marcador en el titulo y apaga el modo.
+    fn continue_msg() -> String {
+        format!(
+            "continua. Cuando hayas terminado del todo y no quede nada por hacer, \
+             ejecuta en una shell: printf '\\033]2;{}\\007'  (fija el titulo del \
+             pane para avisarme; no lo hagas hasta acabar de verdad).",
+            tmux::DONE_MARK
+        )
+    }
+
+    /// Motor del modo continuous. En cada refresco:
+    /// - Si Claude marco el fin en el titulo, apagamos el modo.
+    /// - Si la sesion esta parada (Waiting) y armada, le reenviamos "continua"
+    ///   con Enter y la desarmamos hasta que vuelva a trabajar.
+    fn drive_continuous(&mut self) {
+        // Trabajamos sobre una copia de la lista: mutamos el store dentro.
+        let ids: Vec<String> = self.store.continuous.clone();
+        let mut dirty = false;
+        for id in ids {
+            let Some(p) = self.panes.iter().find(|p| p.id == id) else {
+                continue;
+            };
+            if p.done {
+                self.store.clear_continuous(&id);
+                self.cont_armed.remove(&id);
+                self.status = format!("continuous off · {} finished", p.loc);
+                dirty = true;
+                continue;
+            }
+            match p.state {
+                State::Working => {
+                    // Sigue trabajando: la rearmamos para el siguiente paron.
+                    self.cont_armed.insert(id.clone(), true);
+                }
+                State::Waiting => {
+                    let armed = self.cont_armed.get(&id).copied().unwrap_or(true);
+                    if armed {
+                        tmux::send_line(&id, &Self::continue_msg());
+                        self.cont_armed.insert(id.clone(), false);
+                        self.status = format!("continuous · nudged {}", p.loc);
+                    }
+                }
+            }
+        }
+        if dirty {
+            self.persist();
+        }
     }
 
     pub fn live_ids(&self) -> Vec<String> {
@@ -524,6 +585,29 @@ impl App {
             tmux::focus_pane(&self.panes[i].id);
             self.status = format!("→ {}", self.panes[i].loc);
         }
+    }
+
+    /// Alterna el modo continuous de la sesion seleccionada. Solo aplica a
+    /// panes de Claude (IN PROGRESS / WAITING), no a los prompts de TODO.
+    pub fn toggle_continuous(&mut self) {
+        let Some((_, i)) = self.selected() else { return };
+        if self.col == Col::Todo {
+            self.status = "continuous mode applies to sessions, not TODO prompts".into();
+            return;
+        }
+        let id = self.panes[i].id.clone();
+        let loc = self.panes[i].loc.clone();
+        let on = self.store.toggle_continuous(&id);
+        if on {
+            // Recien activado: armado para actuar en el proximo paron (o ya, si
+            // esta parado, en el siguiente refresco).
+            self.cont_armed.insert(id, true);
+            self.status = format!("continuous ON · {} — I'll keep it going", loc);
+        } else {
+            self.cont_armed.remove(&id);
+            self.status = format!("continuous off · {}", loc);
+        }
+        self.persist();
     }
 
     pub fn start_rename(&mut self) {

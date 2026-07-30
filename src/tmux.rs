@@ -9,6 +9,17 @@ use std::process::Command;
 
 /// Prefijo que Claude Code pone cuando esta idle esperando input.
 const IDLE_MARK: char = '\u{2733}'; // ✳
+
+/// Marcador que Claude escribe en el titulo del pane para avisar de que
+/// termino de verdad (modo continuous). Lo pone ejecutando, p. ej.:
+///   printf '\033]2;<CKAN_DONE>\007'
+/// que fija el titulo del pane a este texto exacto via OSC 2.
+pub const DONE_MARK: &str = "<CKAN_DONE>";
+
+/// Si el titulo del pane lleva el marcador de fin del modo continuous.
+pub fn title_marks_done(title: &str) -> bool {
+    title.contains(DONE_MARK)
+}
 /// Caracteres de spinner braille que usa mientras trabaja. Todos caen en el
 /// bloque Braille Patterns (U+2800..=U+28FF); ver `is_busy_mark`. Se conserva
 /// como registro de los frames vistos en la practica, aunque la deteccion use
@@ -56,6 +67,8 @@ pub struct Pane {
     pub window: String,
     pub title: String,
     pub state: State,
+    /// El titulo lleva el marcador de fin del modo continuous.
+    pub done: bool,
 }
 
 fn tmux(args: &[&str]) -> Option<String> {
@@ -81,9 +94,13 @@ pub fn list_claude_panes() -> Vec<Pane> {
             continue;
         }
         let (id, loc, window, _cmd, title) = (f[0], f[1], f[2], f[3], f[4]);
+        let done = title_marks_done(title);
         // Detectamos por la marca del titulo, no por el comando: asi funciona
         // tanto con `claude` directo como bajo un wrapper (claude-guard.sh, cg).
-        if !looks_like_claude(title) {
+        // Incluimos tambien el pane que acaba de marcar fin: su titulo pasa a
+        // ser el token (sin braille) al ejecutar el printf, y no queremos que
+        // desaparezca justo en el refresco en que ckan debe apagar el modo.
+        if !looks_like_claude(title) && !done {
             continue;
         }
 
@@ -99,12 +116,17 @@ pub fn list_claude_panes() -> Vec<Pane> {
         };
 
         // Quitamos la marca y el espacio para quedarnos con el nombre limpio.
-        let clean = title
-            .chars()
-            .skip(1)
-            .collect::<String>()
-            .trim()
-            .to_string();
+        // Si el titulo es el propio marcador de fin, no hay marca que quitar.
+        let clean = if done {
+            title.trim().to_string()
+        } else {
+            title
+                .chars()
+                .skip(1)
+                .collect::<String>()
+                .trim()
+                .to_string()
+        };
 
         panes.push(Pane {
             id: id.to_string(),
@@ -116,6 +138,7 @@ pub fn list_claude_panes() -> Vec<Pane> {
                 clean
             },
             state,
+            done,
         });
     }
     panes
@@ -131,6 +154,14 @@ pub fn focus_pane(pane_id: &str) {
 /// Usamos `-l` (literal) para que el texto no se interprete como nombres de tecla.
 pub fn send_text(pane_id: &str, text: &str) {
     let _ = tmux(&["send-keys", "-t", pane_id, "-l", text]);
+}
+
+/// Escribe texto en un pane Y manda Enter. Lo usa el modo continuous, que
+/// automatiza el reenvio sin intervencion. Mandamos el texto literal (`-l`) y
+/// el Enter como pulsacion aparte para que no se interprete el propio texto.
+pub fn send_line(pane_id: &str, text: &str) {
+    let _ = tmux(&["send-keys", "-t", pane_id, "-l", text]);
+    let _ = tmux(&["send-keys", "-t", pane_id, "Enter"]);
 }
 
 /// Copia al portapapeles. En esta VM no hay X11, asi que la via real es OSC52
