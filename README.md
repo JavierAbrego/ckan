@@ -16,6 +16,55 @@ pane's state from tmux and moves cards between *in progress* and *waiting* on
 its own. The **swimlanes** are yours — group panes by project, by priority, by
 whatever you like.
 
+## Install
+
+Homebrew and the `.deb` pull in tmux automatically.
+
+### Homebrew (macOS & Linux)
+
+Installs from the tap:
+
+```bash
+brew install JavierAbrego/tap/ckan
+```
+
+### Debian / Ubuntu
+
+Download the `.deb` from the [Releases page](https://github.com/JavierAbrego/ckan/releases) and install it — the `./` is required so apt treats it as a local file (see the Releases page for the exact filename):
+
+```bash
+sudo apt install ./ckan_<version>_amd64.deb
+```
+
+On systems with an older apt (< 1.1) that cannot install a local file, use `dpkg` instead:
+
+```bash
+sudo dpkg -i ckan_<version>_amd64.deb
+```
+
+### Build from source
+
+```bash
+git clone https://github.com/JavierAbrego/ckan.git
+cd ckan
+cargo build --release
+install -m755 target/release/ckan ~/.local/bin/ckan
+```
+
+### Run it
+
+However you installed it, run it **inside tmux**:
+
+```bash
+ckan
+```
+
+It works best in a window of its own:
+
+```bash
+tmux new-window -n kanban ckan
+```
+
 ## Why
 
 tmux tells you a pane exists. It does not tell you that the session in window 5
@@ -34,28 +83,7 @@ meant to send to the API session went to the frontend one.
 ## Requirements
 
 - tmux (developed against 3.5a)
-- Rust 1.75 or newer, to build
-
-## Install
-
-```bash
-git clone https://github.com/JavierAbrego/ckan.git
-cd ckan
-cargo build --release
-install -m755 target/release/ckan ~/.local/bin/ckan
-```
-
-Run it **inside tmux**:
-
-```bash
-ckan
-```
-
-It works best in a window of its own:
-
-```bash
-tmux new-window -n kanban ckan
-```
+- Rust 1.75 or newer, only if you build from source
 
 ## The workflow
 
@@ -149,6 +177,11 @@ characters, so below roughly 100 columns it gets cut off on the right, and the
 help overlay needs about 46 rows to show its last section. Everything still
 works — you just stop being able to read the reminders. Give it a full-width
 window.
+
+**macOS binaries are not signed or notarized.** If you download the tarball by
+hand, Gatekeeper may block it — allow it under Settings → Privacy & Security, or
+run `xattr -d com.apple.quarantine ckan`. Installing through `brew` is not
+affected.
 
 ## Project layout
 

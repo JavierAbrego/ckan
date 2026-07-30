@@ -1,6 +1,6 @@
-# Formula Homebrew de ckan. Vive en HomebrewFormula/ dentro del propio repo,
-# asi que Homebrew la reconoce como un tap del repo: basta con
-#   brew install JavierAbrego/ckan
+# Formula Homebrew de ckan. Se publica copiandola al tap homebrew-tap
+# (github.com/JavierAbrego/homebrew-tap) como Formula/ckan.rb; entonces:
+#   brew install JavierAbrego/tap/ckan
 # Instala el binario precompilado que publican los GitHub Releases; no compila
 # desde fuente. Descarga el tarball correcto segun OS/arch y verifica su sha256.
 #

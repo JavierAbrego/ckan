@@ -1,46 +1,52 @@
-# Instalar ckan con Homebrew
+# Installing ckan with Homebrew
 
-`ckan.rb` es la formula Homebrew de ckan. Vive dentro de este repo, en
-`HomebrewFormula/`, asi que Homebrew la trata como un tap del propio repo.
+`ckan.rb` is the Homebrew formula for ckan. It lives in this repo under
+`HomebrewFormula/`, and it is published to a dedicated tap at
+`github.com/JavierAbrego/homebrew-tap`.
 
-## Instalacion (tap del repo)
+## Installation
 
-    brew install JavierAbrego/ckan
+    brew install JavierAbrego/tap/ckan
 
-Homebrew clona `github.com/JavierAbrego/ckan`, encuentra `HomebrewFormula/ckan.rb`
-y descarga el tarball precompilado del release que corresponda a tu OS/arch
-(macOS arm64, macOS Intel o Linux x86_64), verificando su sha256.
+The three-component form `user/tap/formula` auto-taps
+`JavierAbrego/homebrew-tap`, then installs the formula. It downloads the
+prebuilt release tarball for your OS/arch (macOS arm64, macOS Intel or Linux
+x86_64) and verifies its sha256.
 
-## Publicar la misma formula en un tap dedicado (opcional)
+The explicit two-step form works too:
 
-Si en algun momento existe el repo `github.com/JavierAbrego/homebrew-tap`, se
-puede copiar este mismo `ckan.rb` a su carpeta `Formula/` y usar:
+    brew tap JavierAbrego/tap
+    brew install ckan
 
-    brew tap JavierAbrego/tap && brew install JavierAbrego/tap/ckan
+## Publishing the formula to the tap
 
-(El tap remoto NO se crea desde aqui.)
+Homebrew's short `user/tap/formula` form requires a repo named
+`homebrew-<tap>`, so the formula is served from
+`github.com/JavierAbrego/homebrew-tap`. To publish it, copy this repo's
+`HomebrewFormula/ckan.rb` into that tap as `Formula/ckan.rb`. The `.rb` file
+itself does not change.
 
-## Antes de que funcione: rellenar los sha256
+## Before it works: fill in the sha256
 
-La formula lleva placeholders `REPLACE_WITH_SHA256_OF_...` en los tres bloques
-`sha256`. Tras el primer release (`git push` de un tag `v0.1.0`), cada tarball
-del release trae un fichero acompanante `ckan-v0.1.0-<target>.tar.gz.sha256`.
-Copiar el hash hexadecimal de cada uno al `sha256` correspondiente:
+The formula ships with `REPLACE_WITH_SHA256_OF_...` placeholders in its three
+`sha256` blocks. After the first release (`git push` of a tag `v0.1.0`), each
+release tarball comes with an accompanying `ckan-v0.1.0-<target>.tar.gz.sha256`
+file. Copy the hex hash from each into the matching `sha256`:
 
-- aarch64-apple-darwin   -> bloque `on_macos` / `Hardware::CPU.arm?`
-- x86_64-apple-darwin    -> bloque `on_macos` / else
-- x86_64-unknown-linux-gnu -> bloque `on_linux`
+- aarch64-apple-darwin      -> `on_macos` block / `Hardware::CPU.arm?`
+- x86_64-apple-darwin       -> `on_macos` block / else
+- x86_64-unknown-linux-gnu  -> `on_linux` block
 
-Hasta rellenar los tres, `brew install` fallara la verificacion de checksum.
+Until all three are filled in, `brew install` fails the checksum verification.
 
-## Verificacion local hecha
+## Local verification done
 
 - `ruby -c HomebrewFormula/ckan.rb` -> `Syntax OK`.
-- Las tres URL coinciden EXACTAMENTE con el contrato de naming de los releases.
-- `cargo build --release` sigue sin warnings; `src/` intacto.
+- The three URLs match EXACTLY the release naming contract.
+- `cargo build --release` still builds without warnings; `src/` untouched.
 
-## Diferido (no verificable en local, requiere el release publicado)
+## Deferred (not verifiable locally, needs the published release)
 
-- `brew install` real: descarga del tarball desde GitHub Releases.
-- sha256 reales: dependen de los artefactos que produzca el workflow de release.
-- `brew audit` / `brew test`: requieren Homebrew instalado y el release vivo.
+- Real `brew install`: downloads the tarball from GitHub Releases.
+- Real sha256 values: depend on the artifacts produced by the release workflow.
+- `brew audit` / `brew test`: require Homebrew installed and the release live.
