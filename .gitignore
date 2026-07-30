@@ -3,6 +3,11 @@
 # Los paquetes .deb son artefactos de build, no se versionan.
 *.deb
 
+# Artefactos de release: el directorio de empaquetado y los tarballs que
+# genera el workflow (y las pruebas locales). No se versionan.
+/dist
+*.tar.gz
+
 # Notas de trabajo del manager: estado, tareas y decisiones. Son internas y
 # estan en espanol; el repo publico no las necesita.
 /.manager
