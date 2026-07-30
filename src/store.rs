@@ -47,6 +47,12 @@ pub struct Store {
     /// reescribe "continua" hasta que Claude marca el fin en el titulo.
     #[serde(default)]
     pub continuous: Vec<String>,
+    /// Panes que pidieron parar porque necesitan algo de ti. Lo guardamos aqui
+    /// y no lo leemos del titulo en cada refresco: el titulo lo reescribe
+    /// Claude en cuanto vuelve a trabajar, asi que el aviso se perderia. Se
+    /// limpia solo cuando reactivas el modo continuous en ese pane.
+    #[serde(default)]
+    pub blocked: Vec<String>,
 }
 
 fn default_order() -> Vec<usize> {
@@ -62,6 +68,7 @@ impl Default for Store {
             pane_lane: HashMap::new(),
             notes: HashMap::new(),
             continuous: Vec::new(),
+            blocked: Vec::new(),
         }
     }
 }
@@ -105,6 +112,7 @@ impl Store {
         self.pane_lane.retain(|k, _| live_ids.contains(k));
         self.notes.retain(|k, _| live_ids.contains(k));
         self.continuous.retain(|k| live_ids.contains(k));
+        self.blocked.retain(|k| live_ids.contains(k));
         if let Ok(s) = serde_json::to_string_pretty(self) {
             let p = path();
             // Escritura atomica: si algo peta a media escritura, no corrompemos
@@ -157,6 +165,23 @@ impl Store {
     /// Apaga el modo continuous de un pane (Claude marco el fin).
     pub fn clear_continuous(&mut self, pane_id: &str) {
         self.continuous.retain(|p| p != pane_id);
+    }
+
+    /// Si el pane quedo esperando algo tuyo.
+    pub fn is_blocked(&self, pane_id: &str) -> bool {
+        self.blocked.iter().any(|p| p == pane_id)
+    }
+
+    /// Marca el pane como bloqueado a la espera de que intervengas.
+    pub fn set_blocked(&mut self, pane_id: &str) {
+        if !self.is_blocked(pane_id) {
+            self.blocked.push(pane_id.to_string());
+        }
+    }
+
+    /// Retira el aviso de bloqueo (ya lo atendiste).
+    pub fn clear_blocked(&mut self, pane_id: &str) {
+        self.blocked.retain(|p| p != pane_id);
     }
 
     /// Deja lane_order como una permutacion valida de 0..N_LANES.

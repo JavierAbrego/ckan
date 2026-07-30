@@ -10,15 +10,95 @@ use std::process::Command;
 /// Prefijo que Claude Code pone cuando esta idle esperando input.
 const IDLE_MARK: char = '\u{2733}'; // ✳
 
-/// Marcador que Claude escribe en el titulo del pane para avisar de que
-/// termino de verdad (modo continuous). Lo pone ejecutando, p. ej.:
-///   printf '\033]2;<CKAN_DONE>\007'
-/// que fija el titulo del pane a este texto exacto via OSC 2.
-pub const DONE_MARK: &str = "<CKAN_DONE>";
+/// Como avisa una sesion de que cerro el modo continuous: creando un fichero.
+///
+/// Antes esto se hacia fijando el titulo del pane con `printf '\033]2;...\007'`
+/// y ckan buscaba el marcador al leer los titulos. NO FUNCIONABA, y el motivo
+/// es una carrera imposible de ganar: Claude Code reescribe el titulo del pane
+/// en cada frame de su spinner (decimas de segundo), asi que el marcador se
+/// borra casi al instante; ckan, que sondea cada ~2s, no llegaba a verlo nunca.
+/// Medido: el titulo volvia a su valor normal en menos de un segundo.
+///
+/// El titulo sirve para ESTADO (working/waiting), que Claude reescribe todo el
+/// rato y por eso siempre esta al dia. No sirve para un EVENTO puntual: si
+/// nadie mira en ese instante exacto, se pierde para siempre. Un fichero es
+/// durable — sigue ahi aunque ckan mire un minuto despues.
+///
+/// Guardamos un fichero por pane bajo `<state>/ckan/signals/`, con el pane_id
+/// saneado como nombre y la palabra `done` o `blocked` dentro.
+const SIGNAL_DIR: &str = "signals";
 
-/// Si el titulo del pane lleva el marcador de fin del modo continuous.
-pub fn title_marks_done(title: &str) -> bool {
-    title.contains(DONE_MARK)
+/// Lo que una sesion puede senalizar para cerrar el modo continuous.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Signal {
+    /// Termino el trabajo de verdad.
+    Done,
+    /// No puede seguir sin ti (una credencial, una decision, un comando
+    /// interactivo). Sin esta salida, una sesion bloqueada se queda recibiendo
+    /// "continua" en bucle sin que nadie pueda avanzar.
+    Blocked,
+}
+
+/// Directorio donde las sesiones dejan sus senales. Mismo criterio que el
+/// board: respeta XDG_STATE_HOME y cae a ~/.local/state.
+pub fn signal_dir() -> std::path::PathBuf {
+    let base = match std::env::var("XDG_STATE_HOME") {
+        Ok(x) if !x.is_empty() => std::path::PathBuf::from(x),
+        _ => {
+            let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+            let mut p = std::path::PathBuf::from(home);
+            p.push(".local/state");
+            p
+        }
+    };
+    base.join("ckan").join(SIGNAL_DIR)
+}
+
+/// Nombre de fichero para un pane. El id de tmux (`%17`) lleva un `%` que no
+/// queremos en una ruta, asi que nos quedamos con lo alfanumerico.
+fn signal_name(pane_id: &str) -> String {
+    pane_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
+}
+
+/// Ruta del fichero de senal de un pane.
+pub fn signal_path(pane_id: &str) -> std::path::PathBuf {
+    signal_dir().join(signal_name(pane_id))
+}
+
+/// Lee la senal que haya dejado un pane, si la hay.
+pub fn read_signal(pane_id: &str) -> Option<Signal> {
+    let raw = std::fs::read_to_string(signal_path(pane_id)).ok()?;
+    match raw.trim() {
+        "done" => Some(Signal::Done),
+        "blocked" => Some(Signal::Blocked),
+        // Contenido que no reconocemos: lo ignoramos en vez de adivinar. Mejor
+        // seguir dando nudges que apagar el modo por un fichero corrupto.
+        _ => None,
+    }
+}
+
+/// Borra la senal de un pane. La consumimos al actuar sobre ella para que una
+/// senal vieja no vuelva a cerrar el modo la proxima vez que lo actives.
+pub fn clear_signal(pane_id: &str) {
+    let _ = std::fs::remove_file(signal_path(pane_id));
+}
+
+/// El comando que le pedimos a la sesion que ejecute para senalizar. Va dentro
+/// del mensaje de "continua", asi que tiene que ser una linea que funcione tal
+/// cual en cualquier shell.
+pub fn signal_cmd(pane_id: &str, sig: Signal) -> String {
+    let word = match sig {
+        Signal::Done => "done",
+        Signal::Blocked => "blocked",
+    };
+    format!(
+        "mkdir -p {dir} && echo {word} > {path}",
+        dir = signal_dir().display(),
+        path = signal_path(pane_id).display(),
+    )
 }
 /// Caracteres de spinner braille que usa mientras trabaja. Todos caen en el
 /// bloque Braille Patterns (U+2800..=U+28FF); ver `is_busy_mark`. Se conserva
@@ -67,8 +147,6 @@ pub struct Pane {
     pub window: String,
     pub title: String,
     pub state: State,
-    /// El titulo lleva el marcador de fin del modo continuous.
-    pub done: bool,
 }
 
 fn tmux(args: &[&str]) -> Option<String> {
@@ -94,13 +172,9 @@ pub fn list_claude_panes() -> Vec<Pane> {
             continue;
         }
         let (id, loc, window, _cmd, title) = (f[0], f[1], f[2], f[3], f[4]);
-        let done = title_marks_done(title);
         // Detectamos por la marca del titulo, no por el comando: asi funciona
         // tanto con `claude` directo como bajo un wrapper (claude-guard.sh, cg).
-        // Incluimos tambien el pane que acaba de marcar fin: su titulo pasa a
-        // ser el token (sin braille) al ejecutar el printf, y no queremos que
-        // desaparezca justo en el refresco en que ckan debe apagar el modo.
-        if !looks_like_claude(title) && !done {
+        if !looks_like_claude(title) {
             continue;
         }
 
@@ -116,17 +190,12 @@ pub fn list_claude_panes() -> Vec<Pane> {
         };
 
         // Quitamos la marca y el espacio para quedarnos con el nombre limpio.
-        // Si el titulo es el propio marcador de fin, no hay marca que quitar.
-        let clean = if done {
-            title.trim().to_string()
-        } else {
-            title
-                .chars()
-                .skip(1)
-                .collect::<String>()
-                .trim()
-                .to_string()
-        };
+        let clean = title
+            .chars()
+            .skip(1)
+            .collect::<String>()
+            .trim()
+            .to_string();
 
         panes.push(Pane {
             id: id.to_string(),
@@ -138,7 +207,6 @@ pub fn list_claude_panes() -> Vec<Pane> {
                 clean
             },
             state,
-            done,
         });
     }
     panes

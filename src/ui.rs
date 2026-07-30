@@ -468,6 +468,16 @@ fn pane_card(app: &App, lane: usize, i: usize, col: Col, color: Color, w: u16) -
                 .add_modifier(Modifier::BOLD),
         ));
     }
+    // La sesion paro el modo continuous porque necesita algo de ti. En amarillo
+    // porque no es un error: es una peticion esperando respuesta.
+    if app.store.is_blocked(&p.id) {
+        head.push(Span::styled(
+            "  ⚑ needs you",
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        ));
+    }
     let mut out = vec![Line::from(head)];
 
     // Titulo que Claude se autoasigna.
@@ -799,10 +809,23 @@ fn draw_help(f: &mut Frame, area: Rect) {
 
    Continuous mode (⟳ cont): whenever the session stops and
    waits for you, ckan types 'continua' + Enter for you, so it
-   keeps going unattended. It asks Claude to set the pane title
-   to <CKAN_DONE> (via printf) when it has truly finished; ckan
-   sees that mark and switches the mode off on its own. Toggle
-   it off any time with c.
+   keeps going unattended. It asks Claude to signal when it is
+   truly finished by writing a file under state/ckan/signals/;
+   ckan reads it on the next refresh and switches the mode off
+   on its own. Toggle it off any time with c.
+
+   The session can also stop because it needs something from
+   you (a credential, a decision, an interactive command). It
+   signals that the same way, and ckan turns the mode off and
+   flags the card with ⚑ needs you, since typing 'continua'
+   again would not unblock anything. Go read what it is asking,
+   then press c to hand it back the wheel: turning the mode on
+   clears the flag.
+
+   The signal is a file and not the pane title on purpose: the
+   title is rewritten by Claude on every spinner frame, so a
+   mark left there is gone in well under a second and ckan,
+   polling every couple of seconds, never saw it.
 
  OTHER
    r           refresh now

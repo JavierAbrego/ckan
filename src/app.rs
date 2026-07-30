@@ -143,20 +143,37 @@ impl App {
     }
 
     /// Mensaje que el modo continuous escribe cuando la sesion se para. Ademas
-    /// de pedir que siga, le indica como avisar de que ha terminado del todo:
-    /// fijando el titulo del pane al marcador con un printf. ckan detecta ese
-    /// marcador en el titulo y apaga el modo.
-    fn continue_msg() -> String {
+    /// de pedir que siga, le da las dos formas de cerrar el modo: termine, o no
+    /// puedo seguir sin ti. Cada una se senaliza escribiendo un fichero, que
+    /// ckan lee en el siguiente refresco y usa para apagar el modo.
+    ///
+    /// Damos las dos salidas a proposito. Con solo la de "termine", una sesion
+    /// que necesita algo del humano no tiene forma de decirlo: se queda
+    /// recibiendo "continua" en bucle, porque responder al mensaje la devuelve
+    /// a Working y la rearma.
+    ///
+    /// Le decimos ademas que no invente trabajo. Sin esa frase, una sesion que
+    /// ya termino interpreta el "continua" repetido como que quieres mas cosas
+    /// y se pone a cambiar ficheros que nadie le pidio: hacer de mas es peor
+    /// que pararse.
+    fn continue_msg(pane_id: &str) -> String {
         format!(
             "continua. Cuando hayas terminado del todo y no quede nada por hacer, \
-             ejecuta en una shell: printf '\\033]2;{}\\007'  (fija el titulo del \
-             pane para avisarme; no lo hagas hasta acabar de verdad).",
-            tmux::DONE_MARK
+             ejecuta en una shell: {done}  (asi me avisas; no lo hagas hasta acabar \
+             de verdad). Si no puedes seguir porque necesitas algo de mi (una \
+             credencial, una decision, un comando interactivo), ejecuta en su lugar: \
+             {blocked}  y dime en el chat que te falta. Este mensaje es automatico: \
+             lo escribe ckan cuando tu sesion se para, no lo tecleo yo. Si el trabajo \
+             ya esta hecho, senaliza y para — no te inventes tareas nuevas ni toques \
+             nada que no te hayan pedido.",
+            done = tmux::signal_cmd(pane_id, tmux::Signal::Done),
+            blocked = tmux::signal_cmd(pane_id, tmux::Signal::Blocked),
         )
     }
 
     /// Motor del modo continuous. En cada refresco:
-    /// - Si Claude marco el fin en el titulo, apagamos el modo.
+    /// - Si la sesion dejo una senal (termine / necesito algo), apagamos el
+    ///   modo y consumimos la senal.
     /// - Si la sesion esta parada (Waiting) y armada, le reenviamos "continua"
     ///   con Enter y la desarmamos hasta que vuelva a trabajar.
     fn drive_continuous(&mut self) {
@@ -167,10 +184,24 @@ impl App {
             let Some(p) = self.panes.iter().find(|p| p.id == id) else {
                 continue;
             };
-            if p.done {
+            // Senal que haya dejado la sesion. La consumimos siempre al leerla,
+            // para que no vuelva a cerrar el modo la proxima vez que lo actives.
+            if let Some(sig) = tmux::read_signal(&id) {
+                tmux::clear_signal(&id);
                 self.store.clear_continuous(&id);
                 self.cont_armed.remove(&id);
-                self.status = format!("continuous off · {} finished", p.loc);
+                match sig {
+                    tmux::Signal::Done => {
+                        self.status = format!("continuous off · {} finished", p.loc);
+                    }
+                    tmux::Signal::Blocked => {
+                        // Necesita algo de ti. Apagamos el modo igual que con
+                        // Done (seguir mandando "continua" no desbloquea nada)
+                        // y lo anotamos para que la tarjeta lo siga avisando.
+                        self.store.set_blocked(&id);
+                        self.status = format!("continuous off · {} needs you", p.loc);
+                    }
+                }
                 dirty = true;
                 continue;
             }
@@ -182,7 +213,7 @@ impl App {
                 State::Waiting => {
                     let armed = self.cont_armed.get(&id).copied().unwrap_or(true);
                     if armed {
-                        tmux::send_line(&id, &Self::continue_msg());
+                        tmux::send_line(&id, &Self::continue_msg(&id));
                         self.cont_armed.insert(id.clone(), false);
                         self.status = format!("continuous · nudged {}", p.loc);
                     }
@@ -600,7 +631,13 @@ impl App {
         let on = self.store.toggle_continuous(&id);
         if on {
             // Recien activado: armado para actuar en el proximo paron (o ya, si
-            // esta parado, en el siguiente refresco).
+            // esta parado, en el siguiente refresco). Reactivar es la forma de
+            // decir "ya te he desbloqueado", asi que retiramos el aviso: si no,
+            // la tarjeta se quedaria marcada para siempre. Y descartamos
+            // cualquier senal vieja que quedase sin consumir, para que no
+            // apague el modo nada mas encenderlo.
+            self.store.clear_blocked(&id);
+            tmux::clear_signal(&id);
             self.cont_armed.insert(id, true);
             self.status = format!("continuous ON · {} — I'll keep it going", loc);
         } else {
