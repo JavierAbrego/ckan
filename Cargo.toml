@@ -1,6 +1,6 @@
 [package]
 name = "ckan"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "A terminal kanban board for the Claude Code sessions running across your tmux panes"
 license = "MIT"
