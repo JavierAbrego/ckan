@@ -28,6 +28,12 @@ Installs from the tap:
 brew install JavierAbrego/tap/ckan
 ```
 
+Upgrade to the latest release with:
+
+```bash
+brew upgrade JavierAbrego/tap/ckan
+```
+
 ### Debian / Ubuntu
 
 Download the `.deb` from the [Releases page](https://github.com/JavierAbrego/ckan/releases) and install it — the `./` is required so apt treats it as a local file (see the Releases page for the exact filename):
