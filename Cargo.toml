@@ -5,6 +5,10 @@ edition = "2021"
 description = "A terminal kanban board for the Claude Code sessions running across your tmux panes"
 license = "MIT"
 repository = "https://github.com/JavierAbrego/ckan"
+homepage = "https://github.com/JavierAbrego/ckan"
+readme = "README.md"
+keywords = ["tmux", "kanban", "tui", "claude"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 ratatui = "0.29"
@@ -14,3 +18,27 @@ serde_json = "1"
 
 [profile.release]
 opt-level = 2
+
+# Metadatos para `cargo deb` (genera el .deb que se adjunta al release).
+[package.metadata.deb]
+maintainer = "Javier Abrego <javier.abrego@revoluciontech.org>"
+copyright = "2026, Javier Abrego"
+# Sin revision Debian: la version del paquete es exactamente la de Cargo.toml
+# (ckan_<version>_amd64.deb, no ...-1_amd64.deb).
+revision = ""
+license-file = ["LICENSE", "0"]
+extended-description = """\
+ckan is a terminal kanban board that tracks the Claude Code sessions running \
+across your tmux panes: it groups them into swimlanes, shows whether each one \
+is working or waiting for you, and lets you queue prompts and send them to a \
+pane. It must be run inside tmux."""
+# $auto expande las deps de bibliotecas compartidas autodetectadas por
+# dpkg-shlibdeps (libc6, libgcc-s1); tmux es un requisito en tiempo de
+# ejecucion, no de compilacion. Sin $auto, el .deb no declararia libc6.
+depends = "$auto, tmux"
+section = "utils"
+priority = "optional"
+assets = [
+    ["target/release/ckan", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/ckan/README.md", "644"],
+]
